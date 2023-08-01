@@ -1,12 +1,11 @@
 {
-  "domain": "integration_blueprint",
-  "name": "Integration blueprint",
-  "codeowners": [
-    "@ludeeus"
-  ],
+  "domain": "moen_smart_water_network",
+  "name": "Moen Smart Water Network",
+  "codeowners": ["@mattatcha"],
   "config_flow": true,
-  "documentation": "https://github.com/ludeeus/integration_blueprint",
+  "documentation": "https://github.com/mattatcha/moen-smart-water-hass",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/ludeeus/integration_blueprint/issues",
-  "version": "0.0.0"
+  "issue_tracker": "https://github.com/mattatcha/moen-smart-water-hass/issues",
+  "version": "0.0.2",
+  "requirements": ["awsiotsdk"]
 }

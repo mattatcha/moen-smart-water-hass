@@ -1,46 +1,65 @@
-"""Sensor platform for integration_blueprint."""
+r"""Sensor platform for moen_smart_water_network."""
 from __future__ import annotations
-
+import logging
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 
 from .const import DOMAIN
-from .coordinator import BlueprintDataUpdateCoordinator
-from .entity import Entity
+from .coordinator import MoenDataUpdateCoordinator
+from .entity import MoenEntity
 
 ENTITY_DESCRIPTIONS = (
     SensorEntityDescription(
-        key="integration_blueprint",
+        key="moen_smart_water_network",
         name="Integration Sensor",
         icon="mdi:format-quote-close",
     ),
 )
+_LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_entry(hass, entry, async_add_devices):
+async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up the sensor platform."""
-    coordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_devices(
-        Sensor(
-            coordinator=coordinator,
-            entity_description=entity_description,
-        )
-        for entity_description in ENTITY_DESCRIPTIONS
-    )
+    devices: list[MoenDataUpdateCoordinator] = hass.data[DOMAIN][config_entry.entry_id][
+        "devices"
+    ]
+    entities = []
+    for device in devices:
+        entities.extend([DeviceSensor(device), RunningZoneNameSensor(device)])
+
+    async_add_entities(entities)
 
 
-class Sensor(Entity, SensorEntity):
-    """integration_blueprint Sensor class."""
+class DeviceSensor(MoenEntity, SensorEntity):
+    """moen_smart_water_network Sensor class."""
 
-    def __init__(
-        self,
-        coordinator: BlueprintDataUpdateCoordinator,
-        entity_description: SensorEntityDescription,
-    ) -> None:
-        """Initialize the sensor class."""
-        super().__init__(coordinator)
-        self.entity_description = entity_description
+    _attr_name = "state"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self._device.id}_state"
 
     @property
     def native_value(self) -> str:
         """Return the native value of the sensor."""
-        return self.coordinator.data.get("body")
+        hydra = self._device.hydra_overview
+
+        return hydra.get("status")
+
+
+class RunningZoneNameSensor(MoenEntity, SensorEntity):
+    """moen_smart_water_network Sensor class."""
+
+    _attr_name = "running zone"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self._device.id}_running_zone"
+
+    @property
+    def native_value(self) -> str:
+        """Return the native value of the sensor."""
+        hydra = self._device.hydra_overview
+
+        zone = self._device.zone_from_client_id(hydra.get("zoneID", -1))
+
+        return zone.get("name")
