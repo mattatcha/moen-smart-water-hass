@@ -56,10 +56,20 @@ class RunningZoneNameSensor(MoenEntity, SensorEntity):
         return f"{self._device.id}_running_zone"
 
     @property
+    def extra_state_attributes(self):
+        hydra = self._device.hydra_overview
+
+        zone_id = hydra.get("zoneID", -1)
+
+        return {"client_id": zone_id}
+
+    @property
     def native_value(self) -> str:
         """Return the native value of the sensor."""
         hydra = self._device.hydra_overview
 
-        zone = self._device.zone_from_client_id(hydra.get("zoneID", -1))
+        zone_id = hydra.get("zoneID", -1)
+        zone = self._device.zone_from_client_id(zone_id)
 
-        return zone.get("name")
+        _LOGGER.debug("zone id %s: %s", zone_id, zone)
+        return zone.get("name", "None")

@@ -178,4 +178,4 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator):
     def zone_from_client_id(self, client_id: int) -> dict:
         """Return zone from client id."""
         zones = self._device_information.get("irrigation", {}).get("zones", {})
-        return next((zone for zone in zones if zone["clientId"] == client_id), {})
+        return next((zone for zone in zones if zone["clientId"] == str(client_id)), {})

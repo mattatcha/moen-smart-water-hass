@@ -77,13 +77,28 @@ class ApiClient:
 
         iss = vals["iss"].removeprefix("https://")
 
-        credentials_provider = auth.AwsCredentialsProvider.new_cognito(
-            endpoint=COGNITO_ENDPOINT,
-            identity=legacy_id,
-            logins=[(iss, self._id_token)],
-            tls_ctx=io.ClientTlsContext(io.TlsContextOptions()),
-        )
+        # credentials_provider = auth.AwsCredentialsProvider.new_cognito(
+        #     endpoint=COGNITO_ENDPOINT,
+        #     identity=legacy_id,
+        #     logins=[(iss, self._id_token)],
+        #     tls_ctx=io.ClientTlsContext(io.TlsContextOptions()),
+        # )
+        def credentials_factory():
+            # I expect this to be printed every time aws-crt needs to renew the credentials:
+            _LOGGER.debug("credentials_factory was called!")
+            cog = auth.AwsCredentialsProvider.new_cognito(
+                endpoint=COGNITO_ENDPOINT,
+                identity=legacy_id,
+                logins=[(iss, self._id_token)],
+                tls_ctx=io.ClientTlsContext(io.TlsContextOptions()),
+            )
 
+            f = cog.get_credentials()
+            return f.result()
+
+        credentials_provider = auth.AwsCredentialsProvider.new_delegate(
+            credentials_factory
+        )
         mqtt_connection = mqtt_connection_builder.websockets_with_default_aws_signing(
             region=MQTT_REGION,
             endpoint=MQTT_ENDPOINT,
