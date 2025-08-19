@@ -3,6 +3,7 @@
 For more details about this integration, please refer to
 https://github.com/mattatcha/moen-smart-water-hass
 """
+
 from __future__ import annotations
 import asyncio
 import logging
@@ -33,8 +34,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = {}
     try:
         hass.data[DOMAIN][entry.entry_id][CLIENT] = client = ApiClient(
-            # username=entry.data[CONF_USERNAME],
-            # password=entry.data[CONF_PASSWORD],
             access_token=entry.data[CONF_ACCESS_TOKEN],
             refresh_token=entry.data[CONF_REFRESH_TOKEN],
             session=session,

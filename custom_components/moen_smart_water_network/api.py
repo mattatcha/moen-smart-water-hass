@@ -1,4 +1,5 @@
 """Moen API Client."""
+
 from __future__ import annotations
 
 import asyncio
@@ -33,7 +34,10 @@ COGNITO_ENDPOINT = "cognito-identity.us-east-2.amazonaws.com"
 MQTT_REGION = "us-east-2"
 MQTT_ENDPOINT = "a1r2q5ic87novc-ats.iot.us-east-2.amazonaws.com"
 
+USER_AGENT = "Moen/3 CFNetwork/1408.0.4 Darwin/22.5.0"
+
 _LOGGER = logging.getLogger(__name__)
+_MQTTLOGGER = logging.getLogger(f"{__name__}.mqtt")
 
 
 class ApiClientError(Exception):
@@ -48,20 +52,19 @@ class ApiClientAuthenticationError(ApiClientError):
     """Exception to indicate an authentication error."""
 
 
+io.init_logging(io.LogLevel.Info, "stderr")
+
+
 class ApiClient:
     """Moen API Client."""
 
     def __init__(
         self,
-        # username: str,
-        # password: str,
         access_token: str,
         refresh_token: str,
         session: Optional[ClientSession] = None,
     ) -> None:
         """Moen API Client."""
-        # self._username = username
-        # self._password = password
         self._session: ClientSession = session
         self._token: Optional[str] = access_token
         self._refresh_token: Optional[str] = refresh_token
@@ -85,7 +88,7 @@ class ApiClient:
         # )
         def credentials_factory():
             # I expect this to be printed every time aws-crt needs to renew the credentials:
-            _LOGGER.debug("credentials_factory was called!")
+            _LOGGER.debug("credentials_factory was called! - %s", self._id_token)
             cog = auth.AwsCredentialsProvider.new_cognito(
                 endpoint=COGNITO_ENDPOINT,
                 identity=legacy_id,
@@ -106,19 +109,19 @@ class ApiClient:
             client_id=str(uuid4()),
             clean_session=False,
             keep_alive_secs=30,
-            on_connection_interrupted=lambda connection, error, **kwargs: _LOGGER.debug(
-                "connection interrupted: %s", error
-            ),
-            on_connection_failure=lambda connection, callback_data: _LOGGER.error(
+            on_connection_interrupted=lambda connection,
+            error,
+            **kwargs: _MQTTLOGGER.debug("connection interrupted: %s", error),
+            on_connection_failure=lambda connection, callback_data: _MQTTLOGGER.error(
                 "connection failure: %s", callback_data
             ),
-            on_connection_resumed=lambda connection, return_code, session_present: _LOGGER.debug(
-                "connection resumed: %s", return_code
-            ),
-            on_connection_success=lambda connection, callback_data: _LOGGER.debug(
+            on_connection_resumed=lambda connection,
+            return_code,
+            session_present: _MQTTLOGGER.debug("connection resumed: %s", return_code),
+            on_connection_success=lambda connection, callback_data: _MQTTLOGGER.debug(
                 "connection success: %s", callback_data
             ),
-            on_connection_closed=lambda connection, callback_data: _LOGGER.debug(
+            on_connection_closed=lambda connection, callback_data: _MQTTLOGGER.debug(
                 "connection closed: %s", callback_data
             ),
         )
@@ -128,10 +131,10 @@ class ApiClient:
         shadow_client = iotshadow.IotShadowClient(mqtt_connection)
 
         connected_future.result()
-        _LOGGER.debug("connected to mqtt")
+        _MQTTLOGGER.debug("connected to mqtt")
 
         def on_message_received(topic, payload, **kwargs):
-            _LOGGER.debug("Received message on topic '%s': %s", topic, payload)
+            _MQTTLOGGER.debug("Received message on topic '%s': %s", topic, payload)
 
         subscribe_future, _ = mqtt_connection.subscribe(
             topic=f"iot/HYD/{client_id}/subscription",
@@ -141,7 +144,7 @@ class ApiClient:
 
         subscribe_future.result()
 
-        _LOGGER.debug("Subscribing to Update responses...")
+        _MQTTLOGGER.debug("Subscribing to Update responses...")
         (
             update_accepted_subscribed_future,
             _,
@@ -154,7 +157,7 @@ class ApiClient:
         # Wait for subscriptions to succeed
         update_accepted_subscribed_future.result()
 
-        _LOGGER.debug("Subscribing to Get responses...")
+        _MQTTLOGGER.debug("Subscribing to Get responses...")
         (
             get_accepted_subscribed_future,
             _,
@@ -166,6 +169,19 @@ class ApiClient:
 
         # Wait for subscriptions to succeed
         get_accepted_subscribed_future.result()
+
+        _MQTTLOGGER.debug("Subscribing to Update responses...")
+        (
+            subscribe_to_shadow_updated_events_future,
+            _,
+        ) = shadow_client.subscribe_to_shadow_updated_events(
+            request=iotshadow.ShadowUpdatedSubscriptionRequest(thing_name=client_id),
+            qos=mqtt.QoS.AT_LEAST_ONCE,
+            callback=callback,
+        )
+
+        # Wait for subscriptions to succeed
+        subscribe_to_shadow_updated_events_future.result()
 
         publish_get_future = shadow_client.publish_get_shadow(
             request=iotshadow.GetShadowRequest(
@@ -192,14 +208,17 @@ class ApiClient:
             auth_request=True,
         )
 
-        _LOGGER.debug(
-            "Received new access token",
-        )
         self._token = auth_response["token"]["access_token"]
         self._token_expiration = datetime.datetime.now() + datetime.timedelta(
             seconds=auth_response["token"]["expires_in"]
         )
         self._id_token = auth_response["token"]["id_token"]
+
+        _LOGGER.debug(
+            "Received new access token that expires in %s at %s,",
+            auth_response["token"]["expires_in"],
+            self._token_expiration,
+        )
 
     async def async_get_alerts(self) -> any:
         """Get alerts from the API."""
@@ -251,6 +270,17 @@ class ApiClient:
         data = {"duid": device_id, "ttl": 0, "zones": zones, "name": name}
         return await self._request_with_refresh(
             method="post", url=f"{API_BASE_URL}/irrigation/manual", data=data
+        )
+
+    async def async_zone_enable(
+        self, device_id: str, zone_id: str, enabled: bool
+    ) -> dict:
+        """Enable or disable a zone"""
+        data = {"enabled": enabled}
+        return await self._request_with_refresh(
+            method="post",
+            url=f"{API_BASE_URL}/device/{device_id}/zone/{device_id}_{zone_id}",
+            data=data,
         )
 
     async def _request_with_refresh(
@@ -313,7 +343,7 @@ class ApiClient:
         #     await self.async_refresh_token()
         headers = {
             "Content-Type": "application/json;charset=UTF-8",
-            "User-Agent": "Moen/3 CFNetwork/1408.0.4 Darwin/22.5.0",
+            "User-Agent": USER_AGENT,
         }
         if not auth_request:
             headers = {

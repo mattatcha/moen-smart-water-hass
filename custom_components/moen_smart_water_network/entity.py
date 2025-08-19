@@ -1,16 +1,19 @@
 """BlueprintEntity class."""
+
 from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.helpers.entity import DeviceInfo, Entity
 
-from typing import Any
-
 from .const import DOMAIN
-from .coordinator import MoenDataUpdateCoordinator
+
+if TYPE_CHECKING:
+    from .coordinator import MoenDataUpdateCoordinator
 
 
 class MoenEntity(Entity):
-    """BlueprintEntity class."""
+    """MoenEntity class."""
 
     _attr_force_update = False
     _attr_has_entity_name = True

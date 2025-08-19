@@ -1,15 +1,17 @@
 """DataUpdateCoordinator for integration_blueprint."""
+
 from __future__ import annotations
+
 import logging
-from typing import Any
 from datetime import timedelta
+from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
 )
-from homeassistant.exceptions import ConfigEntryAuthFailed
 
 from .api import (
     ApiClient,
@@ -17,7 +19,6 @@ from .api import (
     ApiClientError,
 )
 from .const import DOMAIN, LOGGER
-
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ def merge(a, b, path=None):
     for key in b:
         if key in a:
             if isinstance(a[key], dict) and isinstance(b[key], dict):
-                merge(a[key], b[key], path + [str(key)])
+                merge(a[key], b[key], [*path, str(key)])
             elif a[key] == b[key]:
                 pass  # same leaf value
             else:
@@ -47,7 +48,7 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator):
     ) -> None:
         """Initialize."""
         self.hass: HomeAssistant = hass
-        self.client = client
+        self.client: ApiClient = client
         self._manufacturer: str = "Moen"
         self._device_id: str = device_id
         self._device_information: dict[str, Any] = {}
@@ -58,7 +59,7 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator):
             hass=hass,
             logger=LOGGER,
             name=f"{DOMAIN}-{device_id}",
-            update_interval=timedelta(seconds=60),
+            update_interval=timedelta(seconds=15),
         )
 
         self._task = hass.loop.create_task(
@@ -66,16 +67,27 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator):
         )
 
     @callback
-    def _subscribe_update_cb(self, msg):
-        if msg.state.desired is not None:
-            _LOGGER.debug("desired state: %s", msg.state.desired)
+    def _subscribe_update_cb(self, msg) -> None:
+        if hasattr(msg, "current"):
+            if hasattr(msg.current.state, "desired"):
+                _LOGGER.debug("desired state: %s", msg.current.state.desired)
 
-        if msg.state.reported is not None:
-            reported = msg.state.reported
-            _LOGGER.debug("reported state: %s", msg.state.reported)
-            merge(self._shadow_state, reported)
+            if hasattr(msg.current.state, "reported"):
+                reported = msg.current.state.reported
+                _LOGGER.debug("reported state: %s", msg.current.state.reported)
+                merge(self._shadow_state, reported)
 
-            self.hass.add_job(self.async_update_listeners)
+                self.hass.add_job(self.async_update_listeners)
+        if hasattr(msg, "state"):
+            if hasattr(msg.state, "desired"):
+                _LOGGER.debug("desired state: %s", msg.state.desired)
+
+            if hasattr(msg.state, "reported") and msg.state.reported is not None:
+                reported = msg.state.reported
+                _LOGGER.debug("reported state: %s", msg.state.reported)
+                merge(self._shadow_state, reported)
+
+                self.hass.add_job(self.async_update_listeners)
 
     async def _async_update_data(self):
         """Update data via library."""
@@ -85,7 +97,8 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator):
                 self._device_id
             )
 
-            self._schedules = await self.client.async_get_schedules(self._device_id)
+            schedules = await self.client.async_get_schedules(self._device_id)
+            self._schedules = {x["id"]: x for x in schedules["items"]}
         except ApiClientAuthenticationError as exception:
             raise ConfigEntryAuthFailed(exception) from exception
         except ApiClientError as exception:
@@ -133,8 +146,7 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator):
     @property
     def available(self) -> bool:
         """Return True if device is available."""
-        # return self.last_update_success and self._device_information["connected"]
-        return self._device_information["connected"]
+        return self.last_update_success and self._device_information["connected"]
 
     @property
     def is_watering(self) -> bool:
@@ -174,6 +186,15 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator):
     def hydra_overview(self) -> dict:
         """Return True if master valve connected."""
         return self._shadow_state.get("hydraOverview", {})
+
+    def zones(self) -> list:
+        """Return zones."""
+        return self._device_information.get("irrigation", {}).get("zones", [])
+
+    def zone(self, client_id: str) -> dict:
+        """Return zone from client id."""
+        zones = self._device_information.get("irrigation", {}).get("zones", {})
+        return next((zone for zone in zones if zone["clientId"] == str(client_id)), {})
 
     def zone_from_client_id(self, client_id: int) -> dict:
         """Return zone from client id."""
