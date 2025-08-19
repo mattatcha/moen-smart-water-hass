@@ -1,15 +1,13 @@
 """Adds config flow for Blueprint."""
+
 from __future__ import annotations
 
 import voluptuous as vol
 from homeassistant import config_entries
-
 from homeassistant.const import CONF_ACCESS_TOKEN
 from homeassistant.helpers import selector
 
-from .const import DOMAIN, CONF_REFRESH_TOKEN
-
-# from homeassistant.helpers import config_entry_oauth2_flow
+from .const import CONF_REFRESH_TOKEN, DOMAIN
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):

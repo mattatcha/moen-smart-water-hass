@@ -66,13 +66,13 @@ class ApiClient:
     ) -> None:
         """Moen API Client."""
         self._session: ClientSession = session
-        self._token: Optional[str] = access_token
-        self._refresh_token: Optional[str] = refresh_token
-        self._token_expiration: Optional[datetime] = None
+        self._token: str | None = access_token
+        self._refresh_token: str | None = refresh_token
+        self._token_expiration: datetime | None = None
         self._id_token: str = None
 
     async def async_subscribe(self, client_id, callback) -> any:
-        """Subscribe to shadow data"""
+        """Subscribe to shadow data."""
         user = await self.async_get_user()
 
         legacy_id = user["legacyId"]
@@ -80,14 +80,7 @@ class ApiClient:
 
         iss = vals["iss"].removeprefix("https://")
 
-        # credentials_provider = auth.AwsCredentialsProvider.new_cognito(
-        #     endpoint=COGNITO_ENDPOINT,
-        #     identity=legacy_id,
-        #     logins=[(iss, self._id_token)],
-        #     tls_ctx=io.ClientTlsContext(io.TlsContextOptions()),
-        # )
         def credentials_factory():
-            # I expect this to be printed every time aws-crt needs to renew the credentials:
             _LOGGER.debug("credentials_factory was called! - %s", self._id_token)
             cog = auth.AwsCredentialsProvider.new_cognito(
                 endpoint=COGNITO_ENDPOINT,
@@ -266,7 +259,7 @@ class ApiClient:
         )
 
     async def async_manual_run(self, device_id: str, name: str, zones: dict) -> dict:
-        """Start a manual run"""
+        """Start a manual run."""
         data = {"duid": device_id, "ttl": 0, "zones": zones, "name": name}
         return await self._request_with_refresh(
             method="post", url=f"{API_BASE_URL}/irrigation/manual", data=data
@@ -275,7 +268,7 @@ class ApiClient:
     async def async_zone_enable(
         self, device_id: str, zone_id: str, enabled: bool
     ) -> dict:
-        """Enable or disable a zone"""
+        """Enable or disable a zone."""
         data = {"enabled": enabled}
         return await self._request_with_refresh(
             method="post",
@@ -289,11 +282,11 @@ class ApiClient:
         url: str,
         params: dict | None = None,
         data: dict | None = None,
-    ) -> Optional[any]:
+    ) -> any | None:
         """
         Wrapper around _request, to refresh tokens if needed.
         If an ExpiredTokenError is seen call refresh_tokens and
-        try one more time. Otherwise, send the results up
+        try one more time. Otherwise, send the results up.
         """
         response = None
         refreshed = False
@@ -329,18 +322,6 @@ class ApiClient:
         auth_request: bool = False,
     ) -> any:
         """Get information from the API."""
-        # Add authorization header to headers dict
-        # if self._token_expiration and datetime.now() >= self._token_expiration:
-        #     _LOGGER.info("Requesting new access token to replace expired one")
-
-        #     # Nullify the token so that the authentication request doesn't use it:
-        #     self._token = None
-
-        #     # Nullify the expiration so the authentication request doesn't get caught
-        #     # here:
-        #     self._token_expiration = None
-
-        #     await self.async_refresh_token()
         headers = {
             "Content-Type": "application/json;charset=UTF-8",
             "User-Agent": USER_AGENT,
@@ -362,20 +343,19 @@ class ApiClient:
                     params=params,
                 )
                 if response.status in (401, 403):
+                    msg = "Invalid credentials"
                     raise ApiClientAuthenticationError(
-                        "Invalid credentials",
+                        msg,
                     )
 
                 response.raise_for_status()
                 return await response.json()
 
-        except asyncio.TimeoutError as exception:
-            raise ApiClientCommunicationError(
-                f"Timeout error fetching information from {url}: {exception}"
-            ) from exception
+        except TimeoutError as exception:
+            msg = f"Timeout error fetching information from {url}: {exception}"
+            raise ApiClientCommunicationError(msg) from exception
         except (aiohttp.ClientError, socket.gaierror) as exception:
+            msg = f"Error fetching information from {url}: {exception}"
             raise ApiClientCommunicationError(
-                f"Error fetching information from {url}: {exception}",
+                msg,
             ) from exception
-        # except Exception as exception:  # pylint: disable=broad-except
-        #     raise ApiClientError("Something really wrong happened!") from exception

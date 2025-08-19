@@ -1,11 +1,9 @@
 """Binary sensor platform for moen_smart_water_network."""
+
 from __future__ import annotations
 
 import logging
-
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from typing import TYPE_CHECKING
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -14,8 +12,14 @@ from homeassistant.components.binary_sensor import (
 )
 
 from .const import DOMAIN
-from .coordinator import MoenDataUpdateCoordinator
 from .entity import MoenEntity
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+    from .coordinator import MoenDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,18 +32,6 @@ ENTITY_DESCRIPTIONS = (
 )
 
 
-# async def async_setup_entry(hass, entry, async_add_devices):
-#     """Set up the binary_sensor platform."""
-#     coordinator = hass.data[DOMAIN][entry.entry_id]
-#     async_add_devices(
-#         BinarySensor(
-#             coordinator=coordinator,
-#             entity_description=entity_description,
-#         )
-#         for entity_description in ENTITY_DESCRIPTIONS
-#     )
-
-
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -50,9 +42,7 @@ async def async_setup_entry(
         "devices"
     ]
     entities: list[BinarySensorEntity] = []
-    # _LOGGER.debug("devices: %s", devices)
     for device in devices:
-        # _LOGGER.debug("device: %s", device.data)
         entities.append(BinarySensor(device))
         entities.append(WateringBinarySensor(device))
     async_add_entities(entities)
@@ -68,7 +58,7 @@ class BinarySensor(MoenEntity, BinarySensorEntity):
 
     @property
     def unique_id(self) -> str:
-        """Return a unique id"""
+        """Return a unique id."""
         return f"{self._device.id}_connected"
 
     @property

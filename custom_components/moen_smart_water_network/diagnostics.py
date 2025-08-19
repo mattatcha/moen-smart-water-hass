@@ -1,13 +1,18 @@
 """Diagnostics support for Moen."""
+
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.diagnostics import async_redact_data
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from .api import ApiClient
+
 from .const import CLIENT, DOMAIN
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
+
+    from .api import ApiClient
 
 CONF_ALTITUDE = "altitude"
 CONF_UUID = "uuid"
