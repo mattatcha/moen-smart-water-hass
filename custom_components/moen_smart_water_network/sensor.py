@@ -1,11 +1,17 @@
 r"""Sensor platform for moen_smart_water_network."""
+
 from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING
+
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 
 from .const import DOMAIN
-from .coordinator import MoenDataUpdateCoordinator
 from .entity import MoenEntity
+
+if TYPE_CHECKING:
+    from .coordinator import MoenDataUpdateCoordinator
 
 ENTITY_DESCRIPTIONS = (
     SensorEntityDescription(

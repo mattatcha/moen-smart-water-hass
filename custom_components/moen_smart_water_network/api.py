@@ -6,7 +6,6 @@ import asyncio
 import datetime
 import logging
 import socket
-from typing import Optional
 from uuid import uuid4
 
 import aiohttp
@@ -62,7 +61,7 @@ class ApiClient:
         self,
         access_token: str,
         refresh_token: str,
-        session: Optional[ClientSession] = None,
+        session: ClientSession | None = None,
     ) -> None:
         """Moen API Client."""
         self._session: ClientSession = session
@@ -184,8 +183,14 @@ class ApiClient:
         )
         publish_get_future.result()
 
-        while True:
-            await asyncio.sleep(3)
+        # Keep connection alive until cancelled
+        disconnect_event = asyncio.Event()
+        try:
+            await disconnect_event.wait()
+        except asyncio.CancelledError:
+            _MQTTLOGGER.debug("MQTT subscription cancelled, disconnecting...")
+            mqtt_connection.disconnect()
+            raise
 
     async def async_refresh_token(self) -> None:
         """Refresh tokens from the API."""
@@ -290,7 +295,7 @@ class ApiClient:
         """
         response = None
         refreshed = False
-        for _ in range(0, 2):
+        for _ in range(2):
             try:
                 response = await self._api_wrapper(
                     method=method,

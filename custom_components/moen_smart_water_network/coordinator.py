@@ -24,7 +24,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def merge(a, b, path=None):
-    """merges b into a"""
+    """Merges b into a"""
     if path is None:
         path = []
     for key in b:

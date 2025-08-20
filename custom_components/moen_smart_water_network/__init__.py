@@ -1,21 +1,23 @@
-"""Custom integration to integrate moen_smart_water_network with Home Assistant.
+"""
+Custom integration to integrate moen_smart_water_network with Home Assistant.
 
 For more details about this integration, please refer to
 https://github.com/mattatcha/moen-smart-water-hass
 """
 
 from __future__ import annotations
+
 import asyncio
 import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ACCESS_TOKEN, Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import ApiClient, ApiClientError
-from .const import CLIENT, DOMAIN, CONF_REFRESH_TOKEN
+from .const import CLIENT, CONF_REFRESH_TOKEN, DOMAIN
 from .coordinator import MoenDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
