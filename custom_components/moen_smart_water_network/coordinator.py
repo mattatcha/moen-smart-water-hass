@@ -23,7 +23,7 @@ from .const import DOMAIN, LOGGER
 _LOGGER = logging.getLogger(__name__)
 
 
-def merge(a, b, path=None):
+def merge(a: dict, b: dict, path: list | None = None) -> dict:
     """Merges b into a"""
     if path is None:
         path = []
@@ -67,7 +67,7 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator):
         )
 
     @callback
-    def _subscribe_update_cb(self, msg) -> None:
+    def _subscribe_update_cb(self, msg: Any) -> None:
         if hasattr(msg, "current"):
             if hasattr(msg.current.state, "desired"):
                 _LOGGER.debug("desired state: %s", msg.current.state.desired)

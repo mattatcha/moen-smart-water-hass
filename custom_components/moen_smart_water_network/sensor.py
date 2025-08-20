@@ -11,6 +11,10 @@ from .const import DOMAIN
 from .entity import MoenEntity
 
 if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
     from .coordinator import MoenDataUpdateCoordinator
 
 ENTITY_DESCRIPTIONS = (
@@ -23,7 +27,11 @@ ENTITY_DESCRIPTIONS = (
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_entry(hass, config_entry, async_add_entities):
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
     """Set up the sensor platform."""
     devices: list[MoenDataUpdateCoordinator] = hass.data[DOMAIN][config_entry.entry_id][
         "devices"

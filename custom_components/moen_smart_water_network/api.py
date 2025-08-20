@@ -70,7 +70,7 @@ class ApiClient:
         self._token_expiration: datetime | None = None
         self._id_token: str = None
 
-    async def async_subscribe(self, client_id, callback) -> any:
+    async def async_subscribe(self, client_id: str, callback: callable) -> None:
         """Subscribe to shadow data."""
         user = await self.async_get_user()
 
@@ -79,7 +79,7 @@ class ApiClient:
 
         iss = vals["iss"].removeprefix("https://")
 
-        def credentials_factory():
+        def credentials_factory() -> auth.AwsCredentials:
             _LOGGER.debug("credentials_factory was called! - %s", self._id_token)
             cog = auth.AwsCredentialsProvider.new_cognito(
                 endpoint=COGNITO_ENDPOINT,
@@ -101,19 +101,17 @@ class ApiClient:
             client_id=str(uuid4()),
             clean_session=False,
             keep_alive_secs=30,
-            on_connection_interrupted=lambda connection,
-            error,
-            **kwargs: _MQTTLOGGER.debug("connection interrupted: %s", error),
-            on_connection_failure=lambda connection, callback_data: _MQTTLOGGER.error(
-                "connection failure: %s", callback_data
+            on_connection_interrupted=lambda _connection, error, **_kwargs: (
+                _MQTTLOGGER.debug("connection interrupted: %s", error)
             ),
-            on_connection_resumed=lambda connection,
-            return_code,
-            session_present: _MQTTLOGGER.debug("connection resumed: %s", return_code),
-            on_connection_success=lambda connection, callback_data: _MQTTLOGGER.debug(
+            on_connection_failure=lambda _connection, callback_data: (
+                _MQTTLOGGER.error("connection failure: %s", callback_data)
+            ),
+            on_connection_resumed=lambda _connection, return_code, _session_present: _MQTTLOGGER.debug("connection resumed: %s", return_code),
+            on_connection_success=lambda _connection, callback_data: _MQTTLOGGER.debug(
                 "connection success: %s", callback_data
             ),
-            on_connection_closed=lambda connection, callback_data: _MQTTLOGGER.debug(
+            on_connection_closed=lambda _connection, callback_data: _MQTTLOGGER.debug(
                 "connection closed: %s", callback_data
             ),
         )
@@ -125,7 +123,7 @@ class ApiClient:
         connected_future.result()
         _MQTTLOGGER.debug("connected to mqtt")
 
-        def on_message_received(topic, payload, **kwargs):
+        def on_message_received(topic: str, payload: str, **_kwargs) -> None:
             _MQTTLOGGER.debug("Received message on topic '%s': %s", topic, payload)
 
         subscribe_future, _ = mqtt_connection.subscribe(
