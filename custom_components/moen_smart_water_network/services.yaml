@@ -1,0 +1,26 @@
+start_watering:
+  name: Start watering
+  description: Start manual watering for a specific zone
+  fields:
+    device_id:
+      name: Device ID
+      description: The device identifier (duid) for the Moen irrigation controller
+      required: true
+      selector:
+        text:
+    zone_id:
+      name: Zone ID
+      description: The zone identifier to water
+      required: true
+      selector:
+        text:
+    duration:
+      name: Duration
+      description: Duration to run watering in minutes
+      required: false
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 60
+          unit_of_measurement: minutes

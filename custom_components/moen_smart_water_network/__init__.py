@@ -9,16 +9,25 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import TYPE_CHECKING
 
-from homeassistant.config_entries import ConfigEntry
+import voluptuous as vol
 from homeassistant.const import CONF_ACCESS_TOKEN, Platform
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import (
+    ConfigEntryNotReady,
+    HomeAssistantError,
+    ServiceValidationError,
+)
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import ApiClient, ApiClientError
 from .const import CLIENT, CONF_REFRESH_TOKEN, DOMAIN
 from .coordinator import MoenDataUpdateCoordinator
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant, ServiceCall
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -55,6 +64,46 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await asyncio.gather(*tasks)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Register service
+    async def start_watering_service(call: ServiceCall) -> None:
+        """Handle start watering service call."""
+        device_id = call.data.get("device_id")
+        zone_id = f"{device_id}_{call.data.get('zone_id')}"
+        duration = call.data.get("duration", 5)  # Default 5 minutes
+
+        # Find the client for the device
+        client = None
+        for entry_data in hass.data[DOMAIN].values():
+            if isinstance(entry_data, dict) and CLIENT in entry_data:
+                client = entry_data[CLIENT]
+                break
+
+        if not client:
+            raise ServiceValidationError("No Moen client found")
+
+        try:
+            # Create zones dict for manual run - zone_id maps to duration in minutes
+            zones = [{"id": zone_id, "duration": duration}]
+            await client.async_manual_run(
+                device_id=device_id, name="Home Assistant Manual Run", zones=zones
+            )
+        except Exception as err:
+            msg = f"Failed to start watering: {err}"
+            raise HomeAssistantError(msg) from err
+
+    hass.services.async_register(
+        DOMAIN,
+        "start_watering",
+        start_watering_service,
+        schema=vol.Schema(
+            {
+                vol.Required("device_id"): cv.string,
+                vol.Required("zone_id"): cv.string,
+                vol.Optional("duration", default=5): cv.positive_int,
+            }
+        ),
+    )
 
     return True
 
