@@ -94,33 +94,39 @@ class ApiClient:
         credentials_provider = auth.AwsCredentialsProvider.new_delegate(
             credentials_factory
         )
-        mqtt_connection = mqtt_connection_builder.websockets_with_default_aws_signing(
-            region=MQTT_REGION,
-            endpoint=MQTT_ENDPOINT,
-            credentials_provider=credentials_provider,
-            client_id=str(uuid4()),
-            clean_session=False,
-            keep_alive_secs=30,
-            on_connection_interrupted=lambda _connection, error, **_kwargs: (
-                _MQTTLOGGER.debug("connection interrupted: %s", error)
-            ),
-            on_connection_failure=lambda _connection, callback_data: (
-                _MQTTLOGGER.error("connection failure: %s", callback_data)
-            ),
-            on_connection_resumed=lambda _connection, return_code, _session_present: _MQTTLOGGER.debug("connection resumed: %s", return_code),
-            on_connection_success=lambda _connection, callback_data: _MQTTLOGGER.debug(
-                "connection success: %s", callback_data
-            ),
-            on_connection_closed=lambda _connection, callback_data: _MQTTLOGGER.debug(
-                "connection closed: %s", callback_data
-            ),
-        )
+        
+        # Create MQTT connection in executor to avoid blocking the event loop
+        def _create_mqtt_connection():
+            return mqtt_connection_builder.websockets_with_default_aws_signing(
+                region=MQTT_REGION,
+                endpoint=MQTT_ENDPOINT,
+                credentials_provider=credentials_provider,
+                client_id=str(uuid4()),
+                clean_session=False,
+                keep_alive_secs=30,
+                on_connection_interrupted=lambda _connection, error, **_kwargs: (
+                    _MQTTLOGGER.debug("connection interrupted: %s", error)
+                ),
+                on_connection_failure=lambda _connection, callback_data: (
+                    _MQTTLOGGER.error("connection failure: %s", callback_data)
+                ),
+                on_connection_resumed=lambda _connection, return_code, _session_present: _MQTTLOGGER.debug("connection resumed: %s", return_code),
+                on_connection_success=lambda _connection, callback_data: _MQTTLOGGER.debug(
+                    "connection success: %s", callback_data
+                ),
+                on_connection_closed=lambda _connection, callback_data: _MQTTLOGGER.debug(
+                    "connection closed: %s", callback_data
+                ),
+            )
+        
+        loop = asyncio.get_event_loop()
+        mqtt_connection = await loop.run_in_executor(None, _create_mqtt_connection)
 
         connected_future = mqtt_connection.connect()
 
         shadow_client = iotshadow.IotShadowClient(mqtt_connection)
 
-        connected_future.result()
+        await loop.run_in_executor(None, connected_future.result)
         _MQTTLOGGER.debug("connected to mqtt")
 
         def on_message_received(topic: str, payload: str, **_kwargs) -> None:
@@ -132,7 +138,7 @@ class ApiClient:
             callback=on_message_received,
         )
 
-        subscribe_future.result()
+        await loop.run_in_executor(None, subscribe_future.result)
 
         _MQTTLOGGER.debug("Subscribing to Update responses...")
         (
@@ -145,7 +151,7 @@ class ApiClient:
         )
 
         # Wait for subscriptions to succeed
-        update_accepted_subscribed_future.result()
+        await loop.run_in_executor(None, update_accepted_subscribed_future.result)
 
         _MQTTLOGGER.debug("Subscribing to Get responses...")
         (
@@ -158,7 +164,7 @@ class ApiClient:
         )
 
         # Wait for subscriptions to succeed
-        get_accepted_subscribed_future.result()
+        await loop.run_in_executor(None, get_accepted_subscribed_future.result)
 
         _MQTTLOGGER.debug("Subscribing to Update responses...")
         (
@@ -171,7 +177,9 @@ class ApiClient:
         )
 
         # Wait for subscriptions to succeed
-        subscribe_to_shadow_updated_events_future.result()
+        await loop.run_in_executor(
+            None, subscribe_to_shadow_updated_events_future.result
+        )
 
         publish_get_future = shadow_client.publish_get_shadow(
             request=iotshadow.GetShadowRequest(
@@ -179,7 +187,7 @@ class ApiClient:
             ),
             qos=mqtt.QoS.AT_LEAST_ONCE,
         )
-        publish_get_future.result()
+        await loop.run_in_executor(None, publish_get_future.result)
 
         # Keep connection alive until cancelled
         disconnect_event = asyncio.Event()
