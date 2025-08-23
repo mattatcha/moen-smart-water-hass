@@ -44,6 +44,7 @@ async def async_setup_entry(
                 # Exlude any zones which are not connected
                 continue
             entities.extend([ZoneEnableSwitch(device, zone)])
+            entities.extend([ZoneRunSwitch(device, zone)])
         for schedule_id in device.data["schedules"]:
             entities.extend([ScheduleEnableSwitch(device, schedule_id)])
     async_add_devices(entities)
@@ -66,7 +67,7 @@ class ZoneEnableSwitch(MoenEntity, SwitchEntity):
     @property
     def unique_id(self) -> str:
         """Return a unique id by combining controller id and zone number."""
-        return f"{self._device.id}_zone_{self._zone_id}"
+        return f"{self._device.id}_zone_{self._zone_id}_enabled"
 
     @property
     def name(self) -> str:
@@ -117,7 +118,7 @@ class ZoneRunSwitch(MoenEntity, SwitchEntity):
     @property
     def name(self) -> str:
         """Return the friendly name of the zone."""
-        return f"{self._zone_name} Zone Enabled"
+        return f"{self._zone_name} Zone Run"
 
     @property
     def extra_state_attributes(self):
@@ -127,12 +128,7 @@ class ZoneRunSwitch(MoenEntity, SwitchEntity):
     @property
     def is_on(self) -> bool:
         """Return true if the switch is on."""
-        _LOGGER.debug(
-            "zone switch %s: %s",
-            self._zone_number,
-            self._device.zone_from_client_id(self._zone_number).get("enabled"),
-        )
-        return self._device.zone_from_client_id(self._zone_number).get("enabled")
+        return self._device.hydra_overview.get("zoneID") == str(self._zone_number)
 
     async def async_turn_on(self, **_: any) -> None:
         """Turn on the switch."""

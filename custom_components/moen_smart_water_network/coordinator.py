@@ -70,24 +70,25 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator):
     def _subscribe_update_cb(self, msg: Any) -> None:
         if hasattr(msg, "current"):
             if hasattr(msg.current.state, "desired"):
-                _LOGGER.debug("desired state: %s", msg.current.state.desired)
+                _LOGGER.debug(
+                    "mqtt: current desired state: %s", msg.current.state.desired
+                )
 
             if hasattr(msg.current.state, "reported"):
                 reported = msg.current.state.reported
-                _LOGGER.debug("reported state: %s", msg.current.state.reported)
+                _LOGGER.debug(
+                    "mqtt: current reported state: %s", msg.current.state.reported
+                )
                 merge(self._shadow_state, reported)
 
                 self.hass.add_job(self.async_update_listeners)
         if hasattr(msg, "state"):
             if hasattr(msg.state, "desired"):
-                _LOGGER.debug("desired state: %s", msg.state.desired)
+                _LOGGER.debug("mqtt: state.desired state: %s", msg.state.desired)
 
             if hasattr(msg.state, "reported") and msg.state.reported is not None:
                 reported = msg.state.reported
-                _LOGGER.debug("reported state: %s", msg.state.reported)
-                merge(self._shadow_state, reported)
-
-                self.hass.add_job(self.async_update_listeners)
+                _LOGGER.debug("mqtt: state.reported state: %s", msg.state.reported)
 
     async def _async_update_data(self):
         """Update data via library."""
