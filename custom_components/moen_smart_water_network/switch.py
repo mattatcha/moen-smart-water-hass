@@ -128,7 +128,7 @@ class ZoneRunSwitch(MoenEntity, SwitchEntity):
     @property
     def is_on(self) -> bool:
         """Return true if the switch is on."""
-        return self._device.hydra_overview.get("zoneID") == str(self._zone_number)
+        return str(self._device.hydra_overview.get("zoneID")) == str(self._zone_number)
 
     async def async_turn_on(self, **_: any) -> None:
         """Turn on the switch."""
