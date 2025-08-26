@@ -149,7 +149,7 @@ class ApiClient:
         await loop.run_in_executor(None, connected_future.result)
         _MQTTLOGGER.debug("connected to mqtt")
 
-        def on_message_received(topic: str, payload: str, **_kwargs) -> None:
+        def on_message_received(topic: str, payload: str, **_kwargs: Any) -> None:
             _MQTTLOGGER.debug("Received message on topic '%s': %s", topic, payload)
 
         subscribe_future, _ = mqtt_connection.subscribe(
@@ -202,9 +202,7 @@ class ApiClient:
         )
 
         publish_get_future = shadow_client.publish_get_shadow(
-            request=iotshadow.GetShadowRequest(
-                thing_name=client_id  # , client_token=token
-            ),
+            request=iotshadow.GetShadowRequest(thing_name=client_id),
             qos=mqtt.QoS.AT_LEAST_ONCE,
         )
         await loop.run_in_executor(None, publish_get_future.result)
@@ -233,9 +231,9 @@ class ApiClient:
         )
 
         self._token = auth_response["token"]["access_token"]
-        self._token_expiration = datetime.datetime.now() + datetime.timedelta(
-            seconds=auth_response["token"]["expires_in"]
-        )
+        self._token_expiration = datetime.datetime.now(
+            tz=datetime.UTC
+        ) + datetime.timedelta(seconds=auth_response["token"]["expires_in"])
         self._id_token = auth_response["token"]["id_token"]
 
         _LOGGER.debug(
@@ -250,7 +248,7 @@ class ApiClient:
             method="get", url=API_BASE_URL + "/events/alerts"
         )
 
-    async def async_app_shadow_get(self, client_id: str) -> dict | None:
+    async def async_app_shadow_get(self, client_id: str) -> dict:
         """Get app shadow data."""
         return await self._request_with_refresh(
             method="post",
@@ -263,17 +261,17 @@ class ApiClient:
             },
         )
 
-    async def async_get_user(self) -> dict | None:
+    async def async_get_user(self) -> dict:
         """Get data from the API."""
         return await self._request_with_refresh(method="get", url=API_USER_URL)
 
-    async def async_get_devices(self) -> DevicesResponse | None:
+    async def async_get_devices(self) -> DevicesResponse:
         """Get devices from the API."""
         return await self._request_with_refresh(
             method="get", url=f"{API_BASE_URL}/devices"
         )
 
-    async def async_get_device(self, device_id: str) -> DeviceData | None:
+    async def async_get_device(self, device_id: str) -> DeviceData:
         """Get devices from the API."""
         return await self._request_with_refresh(
             method="get",
@@ -281,7 +279,7 @@ class ApiClient:
             params={"expand": "addons"},
         )
 
-    async def async_get_schedules(self, device_id: str) -> SchedulesResponse | None:
+    async def async_get_schedules(self, device_id: str) -> SchedulesResponse:
         """Get data from the API."""
         return await self._request_with_refresh(
             method="get",
@@ -289,20 +287,25 @@ class ApiClient:
             params={"duid": device_id, "type": "scheduled"},
         )
 
-    async def async_manual_run(
-        self, device_id: str, name: str, zones: dict
-    ) -> dict | None:
+    async def async_manual_run(self, device_id: str, name: str, zones: dict) -> dict:
         """Start a manual run."""
         data = {"duid": device_id, "ttl": 0, "zones": zones, "name": name}
         return await self._request_with_refresh(
             method="post", url=f"{API_BASE_URL}/irrigation/manual", data=data
         )
 
-    async def async_zone_enable(
-        self, device_id: str, zone_id: str, enabled: bool
-    ) -> dict | None:
-        """Enable or disable a zone."""
-        data = {"enabled": enabled}
+    async def async_enable_zone(self, device_id: str, zone_id: str) -> dict:
+        """Enable a zone."""
+        data = {"enabled": True}
+        return await self._request_with_refresh(
+            method="post",
+            url=f"{API_BASE_URL}/device/{device_id}/zone/{device_id}_{zone_id}",
+            data=data,
+        )
+
+    async def async_disable_zone(self, device_id: str, zone_id: str) -> dict:
+        """Disable a zone."""
+        data = {"enabled": False}
         return await self._request_with_refresh(
             method="post",
             url=f"{API_BASE_URL}/device/{device_id}/zone/{device_id}_{zone_id}",
@@ -315,9 +318,10 @@ class ApiClient:
         url: str,
         params: dict | None = None,
         data: dict | None = None,
-    ) -> Any | None:
+    ) -> Any:
         """
-        Wrapper around _request, to refresh tokens if needed.
+        Wrap _request to refresh tokens if needed.
+
         If an ExpiredTokenError is seen call refresh_tokens and
         try one more time. Otherwise, send the results up.
         """
@@ -352,6 +356,7 @@ class ApiClient:
         url: str,
         params: dict | None = None,
         data: dict | None = None,
+        *,
         auth_request: bool = False,
     ) -> Any:
         """Get information from the API."""

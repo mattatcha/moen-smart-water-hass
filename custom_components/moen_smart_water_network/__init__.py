@@ -41,6 +41,7 @@ PLATFORMS: list[Platform] = [
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up this integration using UI."""
     session = async_get_clientsession(hass)
+
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {}
     try:
@@ -59,6 +60,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         MoenDataUpdateCoordinator(hass, client, device["duid"], device)
         for device in resp["devices"]
     ]
+
 
     tasks = [device.async_config_entry_first_refresh() for device in devices]
     await asyncio.gather(*tasks)

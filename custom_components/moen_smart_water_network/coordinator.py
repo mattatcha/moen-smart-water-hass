@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
@@ -14,6 +13,11 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
+from custom_components.moen_smart_water_network.types import (
+    CoordinatorData,
+    DeviceData,
+)
+
 from .api import (
     ApiClient,
     ApiClientAuthenticationError,
@@ -22,29 +26,31 @@ from .api import (
 from .const import DOMAIN, LOGGER
 
 if TYPE_CHECKING:
-    from custom_components.moen_smart_water_network.types import DeviceData, ZoneData
+    from custom_components.moen_smart_water_network.types import (
+        ZoneData,
+    )
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def merge(a: dict, b: dict, path: list | None = None) -> dict:
-    """Merges b into a"""
+    """Merge b into a."""
     if path is None:
         path = []
-    for key in b:
+    for key, value in b.items():
         if key in a:
-            if isinstance(a[key], dict) and isinstance(b[key], dict):
-                merge(a[key], b[key], [*path, str(key)])
-            elif a[key] == b[key]:
+            if isinstance(a[key], dict) and isinstance(value, dict):
+                merge(a[key], value, [*path, str(key)])
+            elif a[key] == value:
                 pass  # same leaf value
             else:
-                a[key] = b[key]
+                a[key] = value
         else:
-            a[key] = b[key]
+            a[key] = value
     return a
 
 
-class MoenDataUpdateCoordinator(DataUpdateCoordinator):
+class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
     """Class to manage fetching data from the API."""
 
     def __init__(
@@ -72,15 +78,7 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator):
 
     @callback
     def _subscribe_update_cb(self, msg: Any) -> None:
-        try:
-            msg_json = json.dumps(msg, default=str, indent=2)
-            _LOGGER.debug(
-                "mqtt: received message of type %s:\n%s", type(msg).__name__, msg_json
-            )
-        except (TypeError, ValueError):
-            _LOGGER.debug(
-                "mqtt: received message of type %s: %s", type(msg).__name__, msg
-            )
+        _LOGGER.debug("mqtt: received message of type %s: %s", type(msg).__name__, msg)
 
         if hasattr(msg, "current"):
             if hasattr(msg.current.state, "desired"):
@@ -104,7 +102,7 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator):
                 reported = msg.state.reported
                 _LOGGER.debug("mqtt: state.reported state: %s", msg.state.reported)
 
-    async def _async_update_data(self):
+    async def _async_update_data(self) -> CoordinatorData:
         """Update data via library."""
         try:
             LOGGER.debug("Updating data for %s", self._device_id)
@@ -206,7 +204,7 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator):
         """Return zones."""
         return self._device_information.get("irrigation", {}).get("zones", [])
 
-    def zone_from_client_id(self, client_id: int) -> ZoneData | None:
+    def zone_from_client_id(self, client_id: int | str) -> ZoneData | None:
         """Return zone from client id."""
         return next(
             (zone for zone in self.zones() if zone["clientId"] == str(client_id)), None

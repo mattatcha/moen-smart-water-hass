@@ -50,6 +50,7 @@ class DeviceSensor(MoenEntity, SensorEntity):
 
     @property
     def unique_id(self) -> str:
+        """Return the unique ID for the device sensor."""
         return f"{self._device.id}_state"
 
     @property
@@ -57,7 +58,7 @@ class DeviceSensor(MoenEntity, SensorEntity):
         """Return the native value of the sensor."""
         hydra = self._device.hydra_overview
 
-        return hydra.get("status")
+        return hydra.get("status", "unknown")
 
 
 class RunningZoneNameSensor(MoenEntity, SensorEntity):
@@ -67,10 +68,12 @@ class RunningZoneNameSensor(MoenEntity, SensorEntity):
 
     @property
     def unique_id(self) -> str:
+        """Return the unique ID for the running zone sensor."""
         return f"{self._device.id}_running_zone"
 
     @property
-    def extra_state_attributes(self):
+    def extra_state_attributes(self) -> dict:
+        """Return extra state attributes for the running zone sensor."""
         hydra = self._device.hydra_overview
 
         zone_id = hydra.get("zoneID", -1)

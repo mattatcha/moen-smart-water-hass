@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
 
@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from .coordinator import MoenDataUpdateCoordinator
+    from .types import ScheduleData, ZoneData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,8 +44,8 @@ async def async_setup_entry(
             if zone.get("wired") is False:
                 # Exlude any zones which are not connected
                 continue
-            entities.extend([ZoneEnableSwitch(device, zone)])
-            entities.extend([ZoneRunSwitch(device, zone)])
+            entities.append(ZoneEnableSwitch(device, zone))
+            entities.append(ZoneRunSwitch(device, zone))
         for schedule_id in device.data["schedules"]:
             entities.extend([ScheduleEnableSwitch(device, schedule_id)])
     async_add_devices(entities)
@@ -54,7 +55,7 @@ async def async_setup_entry(
 class ZoneEnableSwitch(MoenEntity, SwitchEntity):
     """moen_smart_water_network switch class."""
 
-    def __init__(self, coordinator: MoenDataUpdateCoordinator, data: dict) -> None:
+    def __init__(self, coordinator: MoenDataUpdateCoordinator, data: ZoneData) -> None:
         """Initialize the switch class."""
         self._zone_name = data["name"]
         self._zone_id = data["clientId"]
@@ -75,27 +76,26 @@ class ZoneEnableSwitch(MoenEntity, SwitchEntity):
         return f"{self._zone_name} Zone Enabled"
 
     @property
-    def extra_state_attributes(self):
+    def extra_state_attributes(self) -> ZoneData | None:
         """Return the state attributes of the device."""
         return self._device.zone_from_client_id(self._zone_id)
 
     @property
     def is_on(self) -> bool:
         """Return true if the switch is on."""
-        return self._device.zone_from_client_id(self._zone_id).get("enabled")
+        zone = self._device.zone_from_client_id(self._zone_id)
+        if zone is not None:
+            return zone.get("enabled")
+        return False
 
-    async def async_turn_on(self, **_: any) -> None:
+    async def async_turn_on(self, **_: Any) -> None:
         """Turn on the switch."""
-        await self._device.client.async_zone_enable(
-            self._device.id, self._zone_id, True
-        )
+        await self._device.client.async_enable_zone(self._device.id, self._zone_id)
         await self._device.async_request_refresh()
 
-    async def async_turn_off(self, **_: any) -> None:
+    async def async_turn_off(self, **_: Any) -> None:
         """Turn off the switch."""
-        await self._device.client.async_zone_enable(
-            self._device.id, self._zone_id, False
-        )
+        await self._device.client.async_disable_zone(self._device.id, self._zone_id)
         await self._device.async_request_refresh()
 
 
@@ -104,7 +104,7 @@ class ZoneRunSwitch(MoenEntity, SwitchEntity):
 
     _attr_icon = "mdi:valve"
 
-    def __init__(self, coordinator: MoenDataUpdateCoordinator, data: dict) -> None:
+    def __init__(self, coordinator: MoenDataUpdateCoordinator, data: ZoneData) -> None:
         """Initialize the switch class."""
         self._zone_name = data["name"]
         self._zone_number = data["clientId"]
@@ -121,7 +121,7 @@ class ZoneRunSwitch(MoenEntity, SwitchEntity):
         return f"{self._zone_name} Zone Run"
 
     @property
-    def extra_state_attributes(self):
+    def extra_state_attributes(self) -> ZoneData | None:
         """Return the state attributes of the device."""
         return self._device.zone_from_client_id(self._zone_number)
 
@@ -130,14 +130,14 @@ class ZoneRunSwitch(MoenEntity, SwitchEntity):
         """Return true if the switch is on."""
         return str(self._device.hydra_overview.get("zoneID")) == str(self._zone_number)
 
-    async def async_turn_on(self, **_: any) -> None:
+    async def async_turn_on(self, **_: Any) -> None:
         """Turn on the switch."""
-        await self._device.api.async_manual_run()
+        raise NotImplementedError
         await self._device.async_request_refresh()
 
-    async def async_turn_off(self, **_: any) -> None:
+    async def async_turn_off(self, **_: Any) -> None:
         """Turn off the switch."""
-        await self._device.api.async_set_title("foo")
+        raise NotImplementedError
         await self._device.async_request_refresh()
 
 
@@ -145,7 +145,6 @@ class ZoneRunSwitch(MoenEntity, SwitchEntity):
 class ScheduleEnableSwitch(MoenEntity, SwitchEntity):
     """moen_smart_water_network switch class."""
 
-    # _attr_entity_category = EntityCategory.CONFIG
     _attr_icon = "mdi:calendar"
 
     def __init__(
@@ -153,8 +152,9 @@ class ScheduleEnableSwitch(MoenEntity, SwitchEntity):
     ) -> None:
         """Initialize the switch class."""
         self._id = schedule_id
+
         self._schedule_name = (
-            coordinator.data.get("schedules").get(schedule_id).get("name")
+            coordinator.data.get("schedules", {}).get(schedule_id, {}).get("name")
         )
         super().__init__(coordinator)
 
@@ -169,23 +169,24 @@ class ScheduleEnableSwitch(MoenEntity, SwitchEntity):
         return f"{self._schedule_name} Schedule Enabled"
 
     @property
-    def extra_state_attributes(self):
+    def extra_state_attributes(self) -> ScheduleData | None:
         """Return the state attributes of the device."""
-        return self._device.data.get("schedules").get(self._id)
+        return self._device.data.get("schedules", {}).get(self._id)
 
     @property
     def is_on(self) -> bool:
         """Return true if the switch is on."""
         return (
-            self._device.data.get("schedules").get(self._id).get("status") == "active"
+            self._device.data.get("schedules", {}).get(self._id, {}).get("status")
+            == "active"
         )
 
-    async def async_turn_on(self, **_: any) -> None:
+    async def async_turn_on(self, **_: Any) -> None:
         """Turn on the switch."""
-        await self._device.api.async_set_title("bar")
+        raise NotImplementedError
         await self._device.async_request_refresh()
 
-    async def async_turn_off(self, **_: any) -> None:
+    async def async_turn_off(self, **_: Any) -> None:
         """Turn off the switch."""
-        await self._device.api.async_set_title("foo")
+        raise NotImplementedError
         await self._device.async_request_refresh()

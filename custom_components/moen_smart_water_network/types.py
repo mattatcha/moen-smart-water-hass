@@ -232,3 +232,10 @@ class DevicesResponse(TypedDict):
     devices: list[DeviceData]
     params: dict[str, Any]
     total: int
+
+
+class CoordinatorData(TypedDict):
+    """Data structure returned by MoenDataUpdateCoordinator."""
+
+    device: DeviceData
+    schedules: dict[str, ScheduleData]
