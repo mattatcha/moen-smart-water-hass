@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
@@ -19,6 +20,9 @@ from .api import (
     ApiClientError,
 )
 from .const import DOMAIN, LOGGER
+
+if TYPE_CHECKING:
+    from custom_components.moen_smart_water_network.types import DeviceData, ZoneData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,14 +48,14 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching data from the API."""
 
     def __init__(
-        self, hass: HomeAssistant, client: ApiClient, device_id: str, data: dict
+        self, hass: HomeAssistant, client: ApiClient, device_id: str, data: DeviceData
     ) -> None:
         """Initialize."""
         self.hass: HomeAssistant = hass
         self.client: ApiClient = client
         self._manufacturer: str = "Moen"
         self._device_id: str = device_id
-        self._device_information: dict[str, Any] = {}
+        self._device_information: DeviceData = data
         self._schedules: dict[str, Any] = {}
         self._shadow_state: dict[str, Any] = {}
 
@@ -68,6 +72,16 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator):
 
     @callback
     def _subscribe_update_cb(self, msg: Any) -> None:
+        try:
+            msg_json = json.dumps(msg, default=str, indent=2)
+            _LOGGER.debug(
+                "mqtt: received message of type %s:\n%s", type(msg).__name__, msg_json
+            )
+        except (TypeError, ValueError):
+            _LOGGER.debug(
+                "mqtt: received message of type %s: %s", type(msg).__name__, msg
+            )
+
         if hasattr(msg, "current"):
             if hasattr(msg.current.state, "desired"):
                 _LOGGER.debug(
@@ -188,16 +202,12 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator):
         """Return True if master valve connected."""
         return self._shadow_state.get("hydraOverview", {})
 
-    def zones(self) -> list:
+    def zones(self) -> list[ZoneData]:
         """Return zones."""
         return self._device_information.get("irrigation", {}).get("zones", [])
 
-    def zone(self, client_id: str) -> dict:
+    def zone_from_client_id(self, client_id: int) -> ZoneData | None:
         """Return zone from client id."""
-        zones = self._device_information.get("irrigation", {}).get("zones", {})
-        return next((zone for zone in zones if zone["clientId"] == str(client_id)), {})
-
-    def zone_from_client_id(self, client_id: int) -> dict:
-        """Return zone from client id."""
-        zones = self._device_information.get("irrigation", {}).get("zones", {})
-        return next((zone for zone in zones if zone["clientId"] == str(client_id)), {})
+        return next(
+            (zone for zone in self.zones() if zone["clientId"] == str(client_id)), None
+        )

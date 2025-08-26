@@ -82,8 +82,12 @@ class RunningZoneNameSensor(MoenEntity, SensorEntity):
         """Return the native value of the sensor."""
         hydra = self._device.hydra_overview
 
-        zone_id = hydra.get("zoneID", -1)
-        zone = self._device.zone_from_client_id(zone_id)
+        zone_id = hydra.get("zoneID")
+        if zone_id is None:
+            return "None"
 
-        _LOGGER.debug("zone id %s: %s", zone_id, zone)
+        zone = self._device.zone_from_client_id(zone_id)
+        if zone is None:
+            return "None"
+
         return zone.get("name", "None")

@@ -6,6 +6,7 @@ import asyncio
 import datetime
 import logging
 import socket
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 import aiohttp
@@ -14,6 +15,15 @@ import jwt
 from aiohttp import ClientSession
 from awscrt import auth, io, mqtt
 from awsiot import iotshadow, mqtt_connection_builder
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from custom_components.moen_smart_water_network.types import (
+        DeviceData,
+        DevicesResponse,
+        SchedulesResponse,
+    )
 
 API_BASE_URL = "https://api.prod.iot.moen.com/v3"
 API_USER_URL = "https://4j1gkf0vji.execute-api.us-east-2.amazonaws.com/prod/v1/users/me"
@@ -51,7 +61,7 @@ class ApiClientAuthenticationError(ApiClientError):
     """Exception to indicate an authentication error."""
 
 
-io.init_logging(io.LogLevel.Info, "stderr")
+io.init_logging(io.LogLevel.Debug, "stderr")
 
 
 class ApiClient:
@@ -61,20 +71,24 @@ class ApiClient:
         self,
         access_token: str,
         refresh_token: str,
-        session: ClientSession | None = None,
+        session: ClientSession,
     ) -> None:
         """Moen API Client."""
         self._session: ClientSession = session
-        self._token: str | None = access_token
-        self._refresh_token: str | None = refresh_token
-        self._token_expiration: datetime | None = None
-        self._id_token: str = None
+        self._token: str = access_token
+        self._refresh_token: str = refresh_token
+        self._token_expiration: datetime.datetime | None = None
+        self._id_token: str | None = None
 
-    async def async_subscribe(self, client_id: str, callback: callable) -> None:
+    async def async_subscribe(self, client_id: str, callback: Callable) -> None:
         """Subscribe to shadow data."""
         user = await self.async_get_user()
+        if user is None:
+            raise ApiClientError("Failed to retrieve user information.")
 
         legacy_id = user["legacyId"]
+        if self._token is None:
+            raise ApiClientAuthenticationError("Access token is missing.")
         vals = jwt.decode(self._token, options={"verify_signature": False})
 
         iss = vals["iss"].removeprefix("https://")
@@ -94,31 +108,37 @@ class ApiClient:
         credentials_provider = auth.AwsCredentialsProvider.new_delegate(
             credentials_factory
         )
-        
+
+        mqtt_client_id = str(uuid4())
+        _MQTTLOGGER.debug("client id: %s", mqtt_client_id)
+
         # Create MQTT connection in executor to avoid blocking the event loop
-        def _create_mqtt_connection():
+        def _create_mqtt_connection() -> mqtt.Connection:
             return mqtt_connection_builder.websockets_with_default_aws_signing(
                 region=MQTT_REGION,
                 endpoint=MQTT_ENDPOINT,
                 credentials_provider=credentials_provider,
-                client_id=str(uuid4()),
+                client_id=mqtt_client_id,
                 clean_session=False,
                 keep_alive_secs=30,
-                on_connection_interrupted=lambda _connection, error, **_kwargs: (
+                on_connection_interrupted=lambda connection, error, **kwargs: (
                     _MQTTLOGGER.debug("connection interrupted: %s", error)
                 ),
-                on_connection_failure=lambda _connection, callback_data: (
+                on_connection_failure=lambda connection, callback_data, **kwargs: (
                     _MQTTLOGGER.error("connection failure: %s", callback_data)
                 ),
-                on_connection_resumed=lambda _connection, return_code, _session_present: _MQTTLOGGER.debug("connection resumed: %s", return_code),
-                on_connection_success=lambda _connection, callback_data: _MQTTLOGGER.debug(
-                    "connection success: %s", callback_data
+                on_connection_resumed=lambda connection,
+                return_code,
+                session_present,
+                **kwargs: (_MQTTLOGGER.debug("connection resumed: %s", return_code)),
+                on_connection_success=lambda callback_data, **kwargs: (
+                    _MQTTLOGGER.debug("connection success: %s", callback_data)
                 ),
-                on_connection_closed=lambda _connection, callback_data: _MQTTLOGGER.debug(
-                    "connection closed: %s", callback_data
+                on_connection_closed=lambda connection, callback_data, **kwargs: (
+                    _MQTTLOGGER.debug("connection closed: %s", callback_data)
                 ),
             )
-        
+
         loop = asyncio.get_event_loop()
         mqtt_connection = await loop.run_in_executor(None, _create_mqtt_connection)
 
@@ -224,13 +244,13 @@ class ApiClient:
             self._token_expiration,
         )
 
-    async def async_get_alerts(self) -> any:
+    async def async_get_alerts(self) -> Any:
         """Get alerts from the API."""
         return await self._request_with_refresh(
             method="get", url=API_BASE_URL + "/events/alerts"
         )
 
-    async def async_app_shadow_get(self, client_id: str) -> dict:
+    async def async_app_shadow_get(self, client_id: str) -> dict | None:
         """Get app shadow data."""
         return await self._request_with_refresh(
             method="post",
@@ -243,17 +263,17 @@ class ApiClient:
             },
         )
 
-    async def async_get_user(self) -> dict:
+    async def async_get_user(self) -> dict | None:
         """Get data from the API."""
         return await self._request_with_refresh(method="get", url=API_USER_URL)
 
-    async def async_get_devices(self) -> dict:
+    async def async_get_devices(self) -> DevicesResponse | None:
         """Get devices from the API."""
         return await self._request_with_refresh(
             method="get", url=f"{API_BASE_URL}/devices"
         )
 
-    async def async_get_device(self, device_id: str) -> dict:
+    async def async_get_device(self, device_id: str) -> DeviceData | None:
         """Get devices from the API."""
         return await self._request_with_refresh(
             method="get",
@@ -261,7 +281,7 @@ class ApiClient:
             params={"expand": "addons"},
         )
 
-    async def async_get_schedules(self, device_id: str) -> dict:
+    async def async_get_schedules(self, device_id: str) -> SchedulesResponse | None:
         """Get data from the API."""
         return await self._request_with_refresh(
             method="get",
@@ -269,7 +289,9 @@ class ApiClient:
             params={"duid": device_id, "type": "scheduled"},
         )
 
-    async def async_manual_run(self, device_id: str, name: str, zones: dict) -> dict:
+    async def async_manual_run(
+        self, device_id: str, name: str, zones: dict
+    ) -> dict | None:
         """Start a manual run."""
         data = {"duid": device_id, "ttl": 0, "zones": zones, "name": name}
         return await self._request_with_refresh(
@@ -278,7 +300,7 @@ class ApiClient:
 
     async def async_zone_enable(
         self, device_id: str, zone_id: str, enabled: bool
-    ) -> dict:
+    ) -> dict | None:
         """Enable or disable a zone."""
         data = {"enabled": enabled}
         return await self._request_with_refresh(
@@ -293,7 +315,7 @@ class ApiClient:
         url: str,
         params: dict | None = None,
         data: dict | None = None,
-    ) -> any | None:
+    ) -> Any | None:
         """
         Wrapper around _request, to refresh tokens if needed.
         If an ExpiredTokenError is seen call refresh_tokens and
@@ -331,7 +353,7 @@ class ApiClient:
         params: dict | None = None,
         data: dict | None = None,
         auth_request: bool = False,
-    ) -> any:
+    ) -> Any:
         """Get information from the API."""
         headers = {
             "Content-Type": "application/json;charset=UTF-8",

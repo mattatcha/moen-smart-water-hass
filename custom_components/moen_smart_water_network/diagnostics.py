@@ -18,6 +18,7 @@ CONF_ALTITUDE = "altitude"
 CONF_UUID = "uuid"
 
 TO_REDACT = {
+    "refresh_token"
     # "address",
     # "full_location",
     # "location",

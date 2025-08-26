@@ -18,3 +18,4 @@ config/*
 
 logs/*
 tmp/*
+testing/*
