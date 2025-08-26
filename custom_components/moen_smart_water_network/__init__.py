@@ -61,7 +61,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         for device in resp["devices"]
     ]
 
-
     tasks = [device.async_config_entry_first_refresh() for device in devices]
     await asyncio.gather(*tasks)
 
