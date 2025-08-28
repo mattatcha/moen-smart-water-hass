@@ -149,17 +149,6 @@ class ApiClient:
         await loop.run_in_executor(None, connected_future.result)
         _MQTTLOGGER.debug("connected to mqtt")
 
-        def on_message_received(topic: str, payload: str, **_kwargs: Any) -> None:
-            _MQTTLOGGER.debug("Received message on topic '%s': %s", topic, payload)
-
-        subscribe_future, _ = mqtt_connection.subscribe(
-            topic=f"iot/HYD/{client_id}/subscription",
-            qos=mqtt.QoS.AT_LEAST_ONCE,
-            callback=on_message_received,
-        )
-
-        await loop.run_in_executor(None, subscribe_future.result)
-
         _MQTTLOGGER.debug("Subscribing to Update responses...")
         (
             update_accepted_subscribed_future,
