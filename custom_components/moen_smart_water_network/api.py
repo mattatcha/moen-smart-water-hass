@@ -265,6 +265,14 @@ class ApiClient:
         """Get data from the API."""
         return await self._request_with_refresh(method="get", url=API_USER_URL)
 
+    async def async_user_presence(self) -> dict:
+        """Send a presence update for the user and return the API response."""
+        return await self._request_with_refresh(
+            method="post",
+            url="https://api.prod.iot.moen.com/v1/user/me/presence",
+            data={"durationSeconds": 35},
+        )
+
     async def async_get_devices(self) -> DevicesResponse:
         """Get devices from the API."""
         return await self._request_with_refresh(

@@ -69,7 +69,7 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
             hass=hass,
             logger=LOGGER,
             name=f"{DOMAIN}-{device_id}",
-            update_interval=timedelta(seconds=15),
+            update_interval=timedelta(seconds=30),
         )
 
         self._task = hass.loop.create_task(
@@ -106,6 +106,9 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
         """Update data via library."""
         try:
             LOGGER.debug("Updating data for %s", self._device_id)
+
+            await self.client.async_user_presence()
+
             self._device_information = await self.client.async_get_device(
                 self._device_id
             )
