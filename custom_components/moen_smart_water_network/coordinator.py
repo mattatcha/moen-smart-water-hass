@@ -77,10 +77,11 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
             client.async_subscribe(data["clientId"], callback=self._subscribe_update_cb)
         )
 
-    @callback
     def _subscribe_update_cb(self, msg: Any) -> None:
+        """Handle MQTT shadow messages (called from AWS IoT SDK thread)."""
         _LOGGER.debug("mqtt: received message of type %s: %s", type(msg).__name__, msg)
 
+        reported = None
         if hasattr(msg, "current"):
             if hasattr(msg.current.state, "desired"):
                 _LOGGER.debug(
@@ -92,9 +93,6 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 _LOGGER.debug(
                     "mqtt: current reported state: %s", msg.current.state.reported
                 )
-                merge(self._shadow_state, reported)
-
-                self.hass.add_job(self.async_update_listeners)
         if hasattr(msg, "state"):
             if hasattr(msg.state, "desired"):
                 _LOGGER.debug("mqtt: state.desired state: %s", msg.state.desired)
@@ -102,9 +100,17 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
             if hasattr(msg.state, "reported") and msg.state.reported is not None:
                 reported = msg.state.reported
                 _LOGGER.debug("mqtt: state.reported state: %s", msg.state.reported)
-                merge(self._shadow_state, reported)
 
-                self.hass.add_job(self.async_update_listeners)
+        if reported is not None:
+            # Schedule the state merge on the event loop to avoid
+            # mutating _shadow_state from the MQTT SDK's IO thread.
+            self.hass.loop.call_soon_threadsafe(self._apply_shadow_update, reported)
+
+    @callback
+    def _apply_shadow_update(self, reported: dict) -> None:
+        """Merge reported shadow state and notify listeners (runs on event loop)."""
+        merge(self._shadow_state, reported)
+        self.async_update_listeners()
 
     async def _async_update_data(self) -> CoordinatorData:
         """Update data via library."""

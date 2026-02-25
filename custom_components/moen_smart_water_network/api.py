@@ -403,7 +403,9 @@ class ApiClient:
                     )
 
                 response.raise_for_status()
-                return await response.json()
+                if response.content_type == "application/json":
+                    return await response.json()
+                return None
 
         except TimeoutError as exception:
             msg = f"Timeout error fetching information from {url}: {exception}"
