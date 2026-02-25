@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
@@ -101,6 +102,9 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
             if hasattr(msg.state, "reported") and msg.state.reported is not None:
                 reported = msg.state.reported
                 _LOGGER.debug("mqtt: state.reported state: %s", msg.state.reported)
+                merge(self._shadow_state, reported)
+
+                self.hass.add_job(self.async_update_listeners)
 
     async def _async_update_data(self) -> CoordinatorData:
         """Update data via library."""
@@ -212,3 +216,13 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
         return next(
             (zone for zone in self.zones() if zone["clientId"] == str(client_id)), None
         )
+
+    async def async_shutdown(self) -> None:
+        """Cancel the MQTT subscription task and clean up."""
+        if self._task is not None and not self._task.done():
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+            self._task = None

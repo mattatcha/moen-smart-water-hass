@@ -130,14 +130,23 @@ class ZoneRunSwitch(MoenEntity, SwitchEntity):
         """Return true if the switch is on."""
         return str(self._device.hydra_overview.get("zoneID")) == str(self._zone_number)
 
-    async def async_turn_on(self, **_: Any) -> None:
-        """Turn on the switch."""
-        raise NotImplementedError
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn on the switch to start watering this zone."""
+        duration = kwargs.get("duration", 5)
+        zone_id = f"{self._device.id}_{self._zone_number}"
+        zones = [{"id": zone_id, "duration": duration}]
+        await self._device.client.async_manual_run(
+            device_id=self._device.id,
+            name="Home Assistant Manual Run",
+            zones=zones,
+        )
         await self._device.async_request_refresh()
 
     async def async_turn_off(self, **_: Any) -> None:
-        """Turn off the switch."""
-        raise NotImplementedError
+        """Turn off the switch to stop watering."""
+        await self._device.client.async_cancel_manual_run(
+            device_id=self._device.id,
+        )
         await self._device.async_request_refresh()
 
 
@@ -182,11 +191,15 @@ class ScheduleEnableSwitch(MoenEntity, SwitchEntity):
         )
 
     async def async_turn_on(self, **_: Any) -> None:
-        """Turn on the switch."""
-        raise NotImplementedError
+        """Turn on the switch to activate the schedule."""
+        await self._device.client.async_update_schedule_status(
+            schedule_id=self._id, status="active"
+        )
         await self._device.async_request_refresh()
 
     async def async_turn_off(self, **_: Any) -> None:
-        """Turn off the switch."""
-        raise NotImplementedError
+        """Turn off the switch to deactivate the schedule."""
+        await self._device.client.async_update_schedule_status(
+            schedule_id=self._id, status="inactive"
+        )
         await self._device.async_request_refresh()

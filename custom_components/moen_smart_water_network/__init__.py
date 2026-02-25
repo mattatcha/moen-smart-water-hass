@@ -111,6 +111,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Handle removal of an entry."""
+    # Cancel MQTT subscription tasks for all devices before unloading
+    entry_data = hass.data[DOMAIN].get(entry.entry_id, {})
+    devices = entry_data.get("devices", [])
+    for device in devices:
+        await device.async_shutdown()
+
     if unloaded := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
     return unloaded

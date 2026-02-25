@@ -291,6 +291,25 @@ class ApiClient:
             method="post", url=f"{API_BASE_URL}/irrigation/manual", data=data
         )
 
+    async def async_cancel_manual_run(self, device_id: str) -> dict:
+        """Cancel a running manual run."""
+        return await self._request_with_refresh(
+            method="delete",
+            url=f"{API_BASE_URL}/irrigation/manual",
+            params={"duid": device_id},
+        )
+
+    async def async_update_schedule_status(
+        self, schedule_id: str, status: str
+    ) -> dict:
+        """Update a schedule's status (active/inactive)."""
+        data = {"status": status}
+        return await self._request_with_refresh(
+            method="patch",
+            url=f"{API_BASE_URL}/irrigation/schedules/{schedule_id}",
+            data=data,
+        )
+
     async def async_enable_zone(self, device_id: str, zone_id: str) -> dict:
         """Enable a zone."""
         data = {"enabled": True}
