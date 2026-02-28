@@ -33,9 +33,12 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [
-    Platform.SENSOR,
     Platform.BINARY_SENSOR,
+    Platform.CALENDAR,
+    Platform.NUMBER,
+    Platform.SENSOR,
     Platform.SWITCH,
+    Platform.VALVE,
 ]
 
 START_WATERING_SCHEMA = vol.Schema(

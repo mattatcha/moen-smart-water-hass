@@ -123,9 +123,7 @@ class MoenApiClient:
             data={"enabled": False},
         )
 
-    async def async_update_zone(
-        self, device_id: str, zone_id: str, data: dict
-    ) -> dict:
+    async def async_update_zone(self, device_id: str, zone_id: str, data: dict) -> dict:
         """Update zone configuration."""
         return await self._request_with_refresh(
             method="post",
@@ -165,9 +163,7 @@ class MoenApiClient:
         """Make a raw API request with current auth headers."""
         headers = self._auth.get_auth_headers()
 
-        _LOGGER.debug(
-            "Making request to %s: params: %s \nbody: %s", url, params, data
-        )
+        _LOGGER.debug("Making request to %s: params: %s \nbody: %s", url, params, data)
 
         try:
             async with async_timeout.timeout(10):

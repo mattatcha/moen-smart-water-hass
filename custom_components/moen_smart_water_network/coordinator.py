@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
@@ -14,6 +14,7 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
 )
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, LOGGER
 from .moen_api import (
@@ -104,9 +105,7 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 _LOGGER.debug(
                     "mqtt: current reported state: %s", msg.current.state.reported
                 )
-                self.hass.loop.call_soon_threadsafe(
-                    self._apply_shadow_update, reported
-                )
+                self.hass.loop.call_soon_threadsafe(self._apply_shadow_update, reported)
         if hasattr(msg, "state"):
             if hasattr(msg.state, "desired"):
                 _LOGGER.debug("mqtt: state.desired state: %s", msg.state.desired)
@@ -114,9 +113,7 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
             if hasattr(msg.state, "reported") and msg.state.reported is not None:
                 reported = msg.state.reported
                 _LOGGER.debug("mqtt: state.reported state: %s", msg.state.reported)
-                self.hass.loop.call_soon_threadsafe(
-                    self._apply_shadow_update, reported
-                )
+                self.hass.loop.call_soon_threadsafe(self._apply_shadow_update, reported)
 
     async def async_start_mqtt(self) -> None:
         """Start MQTT subscription task."""
@@ -153,9 +150,7 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         event = message.get("event")
         if event == "irrigation_run_update":
-            self.hass.loop.call_soon_threadsafe(
-                self._apply_irrigation_run, message
-            )
+            self.hass.loop.call_soon_threadsafe(self._apply_irrigation_run, message)
         else:
             _LOGGER.debug("async mqtt: unhandled event type: %s", event)
 
@@ -208,9 +203,9 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
         return self._device_information["type"]
 
     @property
-    def rssi(self) -> float:
+    def rssi(self) -> float | None:
         """Return rssi for device."""
-        return self._device_information["connectivity"]["rssi"]
+        return self._device_information.get("connectivity", {}).get("rssi")
 
     @property
     def firmware_version(self) -> str:
@@ -230,17 +225,17 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
     @property
     def is_watering(self) -> bool:
         """Return True if device is watering."""
-        return (
+        return bool(
             self._device_information.get("irrigation", {})
             .get("wateringState", {})
-            .get("running")
+            .get("running", False)
         )
 
     @property
     def master_valve_connected(self) -> bool:
         """Return True if master valve connected."""
         return self._device_information.get("irrigation", {}).get(
-            "masterValveConnected"
+            "masterValveConnected", False
         )
 
     @property
@@ -276,9 +271,7 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
         """Return the current irrigation run status."""
         if self._irrigation_run is None:
             return None
-        return (
-            self._irrigation_run.get("body", {}).get("state", {}).get("status")
-        )
+        return self._irrigation_run.get("body", {}).get("state", {}).get("status")
 
     def zones(self) -> list[ZoneData]:
         """Return zones."""
@@ -289,3 +282,89 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
         return next(
             (zone for zone in self.zones() if zone["clientId"] == str(client_id)), None
         )
+
+    @property
+    def watering_mode(self) -> str | None:
+        """Return the current watering mode."""
+        return self._device_information.get("irrigation", {}).get("wateringMode")
+
+    @property
+    def active_zone_duration_remaining(self) -> int | None:
+        """Return duration remaining (s) for the active zone."""
+        if self._irrigation_run is None:
+            return None
+        planned = (
+            self._irrigation_run.get("body", {}).get("state", {}).get("planned", [])
+        )
+        for entry in planned:
+            if entry.get("isActive"):
+                return entry.get("durationRemaining")
+        return None
+
+    @property
+    def active_zone_id(self) -> str | None:
+        """Return zone id of the currently active zone from irrigation run."""
+        if self._irrigation_run is None:
+            return None
+        planned = (
+            self._irrigation_run.get("body", {}).get("state", {}).get("planned", [])
+        )
+        for entry in planned:
+            if entry.get("isActive"):
+                return entry.get("zoneId")
+        return None
+
+    @staticmethod
+    def matches_schedule_day(
+        candidate: datetime,
+        schedule: dict,
+    ) -> bool:
+        """Check if a candidate date matches a schedule's frequency."""
+        frequency = schedule.get("frequency")
+        if frequency == "daily":
+            return True
+        if frequency == "weekly":
+            days = schedule.get("daysOfWeek") or []
+            return candidate.strftime("%A").lower() in [d.lower() for d in days]
+        if frequency == "even":
+            return candidate.day % 2 == 0
+        if frequency == "odd":
+            return candidate.day % 2 == 1
+        return False
+
+    @property
+    def next_schedule_run(self) -> datetime | None:
+        """Compute the next scheduled run time from active schedules."""
+        now = dt_util.now()
+        next_run: datetime | None = None
+
+        for schedule in self._schedules.values():
+            if schedule.get("status") != "active":
+                continue
+            start_at = schedule.get("preferredTime", {}).get("startAt")
+            if not start_at:
+                continue
+            try:
+                time_parts = start_at.split(":")
+                run_hour = int(time_parts[0])
+                run_minute = int(time_parts[1]) if len(time_parts) > 1 else 0
+            except (ValueError, IndexError):
+                continue
+
+            for day_offset in range(14):
+                candidate = now + timedelta(days=day_offset)
+                candidate = candidate.replace(
+                    hour=run_hour,
+                    minute=run_minute,
+                    second=0,
+                    microsecond=0,
+                )
+                if candidate <= now:
+                    continue
+                if not self.matches_schedule_day(candidate, schedule):
+                    continue
+                if next_run is None or candidate < next_run:
+                    next_run = candidate
+                break
+
+        return next_run

@@ -7,10 +7,13 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
 
-from .const import DOMAIN
+from .const import CONF_ZONE_DURATIONS, DEFAULT_MANUAL_RUN_DURATION, DOMAIN
 
 if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+
     from .coordinator import MoenDataUpdateCoordinator
+    from .moen_api.models import ZoneData
 
 
 class MoenEntity(Entity):
@@ -50,3 +53,25 @@ class MoenEntity(Entity):
     async def async_added_to_hass(self) -> None:
         """When entity is added to hass."""
         self.async_on_remove(self._device.async_add_listener(self.async_write_ha_state))
+
+
+class MoenZoneEntity(MoenEntity):
+    """Base entity for zone-specific entities that need duration config."""
+
+    def __init__(
+        self,
+        coordinator: MoenDataUpdateCoordinator,
+        data: ZoneData,
+        config_entry: ConfigEntry,
+    ) -> None:
+        """Initialize with zone data and config entry."""
+        self._zone_name = data["name"]
+        self._zone_number = data["clientId"]
+        self._zone_full_id = data["id"]
+        self._config_entry = config_entry
+        super().__init__(coordinator)
+
+    def _get_duration(self) -> int:
+        """Get run duration from config entry options or default."""
+        durations = self._config_entry.options.get(CONF_ZONE_DURATIONS, {})
+        return durations.get(str(self._zone_number), DEFAULT_MANUAL_RUN_DURATION)

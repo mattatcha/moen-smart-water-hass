@@ -42,9 +42,7 @@ class MoenMqttClient:
         async_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         """Connect to MQTT and subscribe to shadow + async topics."""
-        credentials_provider = self._auth.create_cognito_credentials_provider(
-            legacy_id
-        )
+        credentials_provider = self._auth.create_cognito_credentials_provider(legacy_id)
 
         mqtt_client_id = str(uuid4())
         _LOGGER.debug("MQTT client id: %s", mqtt_client_id)
@@ -65,14 +63,13 @@ class MoenMqttClient:
                 on_connection_failure=lambda connection, callback_data, **kwargs: (
                     _LOGGER.error("MQTT connection failure: %s", callback_data)
                 ),
-                on_connection_resumed=lambda connection,
-                return_code,
-                session_present,
-                **kwargs: (
-                    _LOGGER.debug("MQTT connection resumed: %s", return_code)
+                on_connection_resumed=(
+                    lambda connection, return_code, session_present, **kwargs: (
+                        _LOGGER.debug("MQTT connection resumed: %s", return_code)
+                    )
                 ),
-                on_connection_success=lambda callback_data, **kwargs: (
-                    _LOGGER.debug("MQTT connection success: %s", callback_data)
+                on_connection_success=lambda callback_data, **kwargs: _LOGGER.debug(
+                    "MQTT connection success: %s", callback_data
                 ),
                 on_connection_closed=lambda connection, callback_data, **kwargs: (
                     _LOGGER.debug("MQTT connection closed: %s", callback_data)

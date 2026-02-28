@@ -5,9 +5,7 @@ API_BASE_URL_V1 = "https://api.prod.iot.moen.com/v1"
 API_BASE_URL_V3 = "https://api.prod.iot.moen.com/v3"
 
 # Legacy user endpoint
-API_USER_URL = (
-    "https://4j1gkf0vji.execute-api.us-east-2.amazonaws.com/prod/v1/users/me"
-)
+API_USER_URL = "https://4j1gkf0vji.execute-api.us-east-2.amazonaws.com/prod/v1/users/me"
 
 # Lambda invoke endpoint (for app shadow)
 LAMBDA_INVOKE_URL = (

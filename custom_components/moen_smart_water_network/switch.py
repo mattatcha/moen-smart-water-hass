@@ -5,11 +5,11 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
+from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory
 
 from .const import DOMAIN
-from .entity import MoenEntity
+from .entity import MoenEntity, MoenZoneEntity
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -18,17 +18,9 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from .coordinator import MoenDataUpdateCoordinator
-    from .moen_api.models import ScheduleData, ZoneData
+    from .moen_api.models import ZoneData
 
 _LOGGER = logging.getLogger(__name__)
-
-ENTITY_DESCRIPTIONS = (
-    SwitchEntityDescription(
-        key="moen_smart_water_network",
-        name="Integration Switch",
-        icon="mdi:format-quote-close",
-    ),
-)
 
 
 async def async_setup_entry(
@@ -43,12 +35,9 @@ async def async_setup_entry(
     for device in devices:
         for zone in device.data["device"]["irrigation"]["zones"]:
             if zone.get("wired") is False:
-                # Exlude any zones which are not connected
                 continue
             entities.append(ZoneEnableSwitch(device, zone))
-            entities.append(ZoneRunSwitch(device, zone))
-        for schedule_id in device.data["schedules"]:
-            entities.extend([ScheduleEnableSwitch(device, schedule_id)])
+            entities.append(ZoneRunSwitch(device, zone, entry))
     async_add_devices(entities)
 
 
@@ -101,16 +90,10 @@ class ZoneEnableSwitch(MoenEntity, SwitchEntity):
         await self._device.async_request_refresh()
 
 
-class ZoneRunSwitch(MoenEntity, SwitchEntity):
-    """moen_smart_water_network switch class."""
+class ZoneRunSwitch(MoenZoneEntity, SwitchEntity):
+    """Switch to start manual watering on an irrigation zone."""
 
     _attr_icon = "mdi:valve"
-
-    def __init__(self, coordinator: MoenDataUpdateCoordinator, data: ZoneData) -> None:
-        """Initialize the switch class."""
-        self._zone_name = data["name"]
-        self._zone_number = data["clientId"]
-        super().__init__(coordinator)
 
     @property
     def unique_id(self) -> str:
@@ -133,58 +116,19 @@ class ZoneRunSwitch(MoenEntity, SwitchEntity):
         return str(self._device.hydra_overview.get("zoneID")) == str(self._zone_number)
 
     async def async_turn_on(self, **_: Any) -> None:
-        """Turn on the switch."""
-        raise NotImplementedError
+        """Start manual watering on this zone."""
+        duration = self._get_duration()
+        zones = [{"id": self._zone_full_id, "duration": duration}]
+        await self._device.client.async_create_manual_plan(
+            device_id=self._device.id,
+            name="Home Assistant Manual Run",
+            zones=zones,
+        )
+        await self._device.async_request_refresh()
 
     async def async_turn_off(self, **_: Any) -> None:
-        """Turn off the switch."""
-        raise NotImplementedError
-
-
-class ScheduleEnableSwitch(MoenEntity, SwitchEntity):
-    """Switch to enable or disable an irrigation schedule."""
-
-    _attr_icon = "mdi:calendar"
-    _attr_entity_category = EntityCategory.CONFIG
-
-    def __init__(
-        self, coordinator: MoenDataUpdateCoordinator, schedule_id: str
-    ) -> None:
-        """Initialize the switch class."""
-        self._id = schedule_id
-
-        self._schedule_name = (
-            coordinator.data.get("schedules", {}).get(schedule_id, {}).get("name")
+        """Stop watering — not yet supported by the Moen API."""
+        _LOGGER.warning(
+            "Stopping watering is not yet supported by the Moen API for zone %s",
+            self._zone_name,
         )
-        super().__init__(coordinator)
-
-    @property
-    def unique_id(self) -> str:
-        """Return a unique id by combining controller id and schedule id."""
-        return f"{self._device.id}_schedule_{self._id}"
-
-    @property
-    def name(self) -> str:
-        """Return the friendly name of the zone."""
-        return f"{self._schedule_name} Schedule Enabled"
-
-    @property
-    def extra_state_attributes(self) -> ScheduleData | None:
-        """Return the state attributes of the device."""
-        return self._device.data.get("schedules", {}).get(self._id)
-
-    @property
-    def is_on(self) -> bool:
-        """Return true if the switch is on."""
-        return (
-            self._device.data.get("schedules", {}).get(self._id, {}).get("status")
-            == "active"
-        )
-
-    async def async_turn_on(self, **_: Any) -> None:
-        """Turn on the switch."""
-        raise NotImplementedError
-
-    async def async_turn_off(self, **_: Any) -> None:
-        """Turn off the switch."""
-        raise NotImplementedError

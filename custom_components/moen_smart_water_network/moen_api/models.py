@@ -218,7 +218,7 @@ class ScheduleData(TypedDict):
     name: str
     duid: str
     status: Literal["active", "inactive"]
-    frequency: Literal["daily", "weekly", "even"]
+    frequency: Literal["daily", "weekly", "even", "odd"]
     zones: list[ScheduleZoneData]
     startDate: str
     preferredTime: PreferredTimeData
