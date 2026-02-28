@@ -12,19 +12,13 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
-    from .api import ApiClient
-
-CONF_ALTITUDE = "altitude"
-CONF_UUID = "uuid"
+    from .moen_api import MoenApiClient
 
 TO_REDACT = {
-    "refresh_token"
-    # "address",
-    # "full_location",
-    # "location",
-    # "weather_forecast_location_id",
-    # "weather_station_id",
-    # "image_url",
+    "access_token",
+    "refresh_token",
+    "id_token",
+    "legacyId",
 }
 
 
@@ -32,7 +26,7 @@ async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
-    client: ApiClient = hass.data[DOMAIN][entry.entry_id][CLIENT]
+    client: MoenApiClient = hass.data[DOMAIN][entry.entry_id][CLIENT]
 
     devices = await client.async_get_devices()
     schedules = await client.async_get_schedules(devices["devices"][0]["duid"])

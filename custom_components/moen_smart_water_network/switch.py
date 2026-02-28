@@ -17,7 +17,12 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from .coordinator import MoenDataUpdateCoordinator
-    from .types import ScheduleData, ZoneData
+    from .moen_api.models import ScheduleData, ZoneData
+
+
+from homeassistant.const import (
+    EntityCategory,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -54,6 +59,8 @@ async def async_setup_entry(
 # EntityCategory.CONFIG
 class ZoneEnableSwitch(MoenEntity, SwitchEntity):
     """moen_smart_water_network switch class."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator: MoenDataUpdateCoordinator, data: ZoneData) -> None:
         """Initialize the switch class."""
@@ -133,12 +140,10 @@ class ZoneRunSwitch(MoenEntity, SwitchEntity):
     async def async_turn_on(self, **_: Any) -> None:
         """Turn on the switch."""
         raise NotImplementedError
-        await self._device.async_request_refresh()
 
     async def async_turn_off(self, **_: Any) -> None:
         """Turn off the switch."""
         raise NotImplementedError
-        await self._device.async_request_refresh()
 
 
 # EntityCategory.CONFIG
@@ -146,6 +151,8 @@ class ScheduleEnableSwitch(MoenEntity, SwitchEntity):
     """moen_smart_water_network switch class."""
 
     _attr_icon = "mdi:calendar"
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(
         self, coordinator: MoenDataUpdateCoordinator, schedule_id: str
@@ -184,9 +191,7 @@ class ScheduleEnableSwitch(MoenEntity, SwitchEntity):
     async def async_turn_on(self, **_: Any) -> None:
         """Turn on the switch."""
         raise NotImplementedError
-        await self._device.async_request_refresh()
 
     async def async_turn_off(self, **_: Any) -> None:
         """Turn off the switch."""
         raise NotImplementedError
-        await self._device.async_request_refresh()

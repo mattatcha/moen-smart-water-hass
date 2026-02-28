@@ -64,7 +64,7 @@ class BinarySensor(MoenEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool:
         """Return true if the binary_sensor is on."""
-        return self._device.data.get("device")["connected"]
+        return self._device.data.get("device", {}).get("connected", False)
 
 
 class WateringBinarySensor(MoenEntity, BinarySensorEntity):

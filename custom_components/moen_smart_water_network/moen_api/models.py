@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Literal, TypedDict
 
+# --- Device data ---
+
 
 class LocationData(TypedDict):
     """Location information."""
@@ -60,7 +62,7 @@ class ZoneData(TypedDict):
     media: list[Any]
     auditStatus: Literal["normal", "fault", "noaudit"]
     auditEnabled: bool
-    fault: str | None  # Optional, present when auditStatus is "fault"
+    fault: str | None
     type: str
     soilType: str
     sunExposure: str
@@ -81,7 +83,6 @@ class ZoneData(TypedDict):
     area: float
     sprinklerHeadRate: float
     skipOnRainSensor: bool
-    # Optional fields for specific zones
     allowableWaterContent: float | None
     managementAllowedDepletion: int | None
     rootDepth: int | None
@@ -119,6 +120,9 @@ class DeviceData(TypedDict):
     irrigation: IrrigationData
 
 
+# --- User / auth ---
+
+
 class UserData(TypedDict):
     """User data from API."""
 
@@ -139,10 +143,20 @@ class AuthResponse(TypedDict):
     token: TokenData
 
 
-class ManualRunZoneData(TypedDict):
-    """Zone data for manual run requests."""
+# --- Request types ---
 
-    dur: int  # Duration in seconds
+
+class ZoneDuration(TypedDict):
+    """Zone duration for manual plan requests (APK format)."""
+
+    id: str
+    duration: int  # minutes
+
+
+class ManualRunZoneData(TypedDict):
+    """Zone data for legacy manual run requests."""
+
+    dur: int
 
 
 class ManualRunData(TypedDict):
@@ -177,6 +191,9 @@ class AppShadowRequest(TypedDict):
     body: AppShadowRequestBody
 
 
+# --- Schedule types ---
+
+
 class ScheduleZoneData(TypedDict):
     """Schedule zone configuration."""
 
@@ -190,8 +207,8 @@ class ScheduleZoneData(TypedDict):
 class PreferredTimeData(TypedDict, total=False):
     """Schedule preferred time configuration."""
 
-    startAt: str  # Can be time like "13:00:00" or special value like "dawn"
-    endBefore: str  # Can be time like "06:00:00" or special value like "dawn"
+    startAt: str
+    endBefore: str
 
 
 class ScheduleData(TypedDict):
@@ -213,8 +230,10 @@ class ScheduleData(TypedDict):
     ignoreSkipReason: bool
     ignoreSoilSensorSkip: bool
     type: str
-    # Optional fields for weekly schedules
     daysOfWeek: list[str] | None
+
+
+# --- Response types ---
 
 
 class SchedulesResponse(TypedDict):
@@ -232,6 +251,62 @@ class DevicesResponse(TypedDict):
     devices: list[DeviceData]
     params: dict[str, Any]
     total: int
+
+
+# --- Irrigation run messages (from /async/{DUID} MQTT topic) ---
+
+IrrigationRunStatus = Literal[
+    "PAUSED", "WATERING", "SOAKING", "COMPLETED", "SKIPPED", "STARTING"
+]
+
+
+class IrrigationPlanned(TypedDict, total=False):
+    """A planned zone in an irrigation run."""
+
+    zoneId: str
+    event: str
+    isActive: bool
+    seqNum: int
+    duration: int
+    durationRemaining: int
+    ts: int
+
+
+class IrrigationCompleted(TypedDict, total=False):
+    """A completed zone in an irrigation run."""
+
+    zoneId: str
+    event: str
+    status: str
+    ts: int
+    actualDuration: int
+    plannedDuration: int
+
+
+class IrrigationRunState(TypedDict, total=False):
+    """State of an irrigation run."""
+
+    status: IrrigationRunStatus
+    completed: list[IrrigationCompleted]
+    planned: list[IrrigationPlanned]
+
+
+class IrrigationRunBody(TypedDict, total=False):
+    """Body of an irrigation run message."""
+
+    id: str
+    state: IrrigationRunState
+
+
+class IrrigationRunMessage(TypedDict, total=False):
+    """Message received on /async/{DUID} topic for irrigation run updates."""
+
+    ts: int
+    event: str
+    body: IrrigationRunBody
+
+
+# --- Coordinator data ---
 
 
 class CoordinatorData(TypedDict):

@@ -1,7 +1,9 @@
-"""DataUpdateCoordinator for integration_blueprint."""
+"""DataUpdateCoordinator for Moen Smart Water Network."""
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
@@ -13,22 +15,21 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
-from custom_components.moen_smart_water_network.types import (
+from .const import DOMAIN, LOGGER
+from .moen_api import (
+    MoenApiAuthenticationError,
+    MoenApiClient,
+    MoenApiError,
+    MoenMqttClient,
+)
+from .moen_api.models import (
     CoordinatorData,
     DeviceData,
+    IrrigationRunMessage,
 )
-
-from .api import (
-    ApiClient,
-    ApiClientAuthenticationError,
-    ApiClientError,
-)
-from .const import DOMAIN, LOGGER
 
 if TYPE_CHECKING:
-    from custom_components.moen_smart_water_network.types import (
-        ZoneData,
-    )
+    from .moen_api.models import ZoneData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -54,16 +55,23 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
     """Class to manage fetching data from the API."""
 
     def __init__(
-        self, hass: HomeAssistant, client: ApiClient, device_id: str, data: DeviceData
+        self,
+        hass: HomeAssistant,
+        client: MoenApiClient,
+        mqtt_client: MoenMqttClient,
+        device_id: str,
+        data: DeviceData,
     ) -> None:
         """Initialize."""
         self.hass: HomeAssistant = hass
-        self.client: ApiClient = client
+        self.client: MoenApiClient = client
+        self._mqtt_client: MoenMqttClient = mqtt_client
         self._manufacturer: str = "Moen"
         self._device_id: str = device_id
         self._device_information: DeviceData = data
         self._schedules: dict[str, Any] = {}
         self._shadow_state: dict[str, Any] = {}
+        self._irrigation_run: IrrigationRunMessage | None = None
 
         super().__init__(
             hass=hass,
@@ -72,12 +80,11 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
             update_interval=timedelta(seconds=30),
         )
 
-        self._task = hass.loop.create_task(
-            client.async_subscribe(data["clientId"], callback=self._subscribe_update_cb)
-        )
+        self._mqtt_task: asyncio.Task[None] | None = None
+        self._client_id = data["clientId"]
 
-    @callback
     def _subscribe_update_cb(self, msg: Any) -> None:
+        """Handle shadow MQTT messages (called from AWS CRT thread)."""
         _LOGGER.debug("mqtt: received message of type %s: %s", type(msg).__name__, msg)
 
         if hasattr(msg, "current"):
@@ -91,9 +98,9 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 _LOGGER.debug(
                     "mqtt: current reported state: %s", msg.current.state.reported
                 )
-                merge(self._shadow_state, reported)
-
-                self.hass.add_job(self.async_update_listeners)
+                self.hass.loop.call_soon_threadsafe(
+                    self._apply_shadow_update, reported
+                )
         if hasattr(msg, "state"):
             if hasattr(msg.state, "desired"):
                 _LOGGER.debug("mqtt: state.desired state: %s", msg.state.desired)
@@ -101,6 +108,50 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
             if hasattr(msg.state, "reported") and msg.state.reported is not None:
                 reported = msg.state.reported
                 _LOGGER.debug("mqtt: state.reported state: %s", msg.state.reported)
+
+    async def async_start_mqtt(self) -> None:
+        """Start MQTT subscription task."""
+        self._mqtt_task = self.hass.async_create_task(
+            self._mqtt_client.async_connect(
+                client_id=self._client_id,
+                duid=self._device_id,
+                shadow_callback=self._subscribe_update_cb,
+                async_callback=self._async_message_cb,
+            )
+        )
+
+    async def async_shutdown(self) -> None:
+        """Cancel MQTT task and disconnect."""
+        if self._mqtt_task is not None:
+            self._mqtt_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._mqtt_task
+            self._mqtt_task = None
+        await self._mqtt_client.async_disconnect()
+
+    @callback
+    def _apply_shadow_update(self, reported: dict) -> None:
+        """Apply shadow state update on the event loop."""
+        merge(self._shadow_state, reported)
+        self.async_update_listeners()
+
+    def _async_message_cb(self, message: dict[str, Any]) -> None:
+        """Handle /async/{duid} MQTT messages (called from AWS CRT thread)."""
+        _LOGGER.debug("async mqtt: received message: %s", message)
+
+        event = message.get("event")
+        if event == "irrigation_run_update":
+            self.hass.loop.call_soon_threadsafe(
+                self._apply_irrigation_run, message
+            )
+        else:
+            _LOGGER.debug("async mqtt: unhandled event type: %s", event)
+
+    @callback
+    def _apply_irrigation_run(self, message: dict[str, Any]) -> None:
+        """Apply irrigation run update on the event loop."""
+        self._irrigation_run = message
+        self.async_update_listeners()
 
     async def _async_update_data(self) -> CoordinatorData:
         """Update data via library."""
@@ -115,9 +166,9 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
             schedules = await self.client.async_get_schedules(self._device_id)
             self._schedules = {x["id"]: x for x in schedules["items"]}
-        except ApiClientAuthenticationError as exception:
+        except MoenApiAuthenticationError as exception:
             raise ConfigEntryAuthFailed(exception) from exception
-        except ApiClientError as exception:
+        except MoenApiError as exception:
             raise UpdateFailed(exception) from exception
 
         return {"device": self._device_information, "schedules": self._schedules}
@@ -182,26 +233,40 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     @property
     def rain_sensor_connected(self) -> bool:
-        """Return True if master valve connected."""
+        """Return True if rain sensor connected."""
         return (
             self._device_information.get("irrigation", {})
-            .get("rainSensor")
-            .get("connected")
+            .get("rainSensor", {})
+            .get("connected", False)
         )
 
     @property
     def flow_sensor_connected(self) -> bool:
-        """Return True if master valve connected."""
+        """Return True if flow sensor connected."""
         return (
             self._device_information.get("irrigation", {})
-            .get("flowSensor")
-            .get("connected")
+            .get("flowSensor", {})
+            .get("connected", False)
         )
 
     @property
     def hydra_overview(self) -> dict:
-        """Return True if master valve connected."""
+        """Return shadow hydra overview state."""
         return self._shadow_state.get("hydraOverview", {})
+
+    @property
+    def irrigation_run(self) -> IrrigationRunMessage | None:
+        """Return the latest irrigation run message from /async topic."""
+        return self._irrigation_run
+
+    @property
+    def irrigation_run_status(self) -> str | None:
+        """Return the current irrigation run status."""
+        if self._irrigation_run is None:
+            return None
+        return (
+            self._irrigation_run.get("body", {}).get("state", {}).get("status")
+        )
 
     def zones(self) -> list[ZoneData]:
         """Return zones."""

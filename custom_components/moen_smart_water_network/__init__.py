@@ -21,9 +21,9 @@ from homeassistant.exceptions import (
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import ApiClient, ApiClientError
 from .const import CLIENT, CONF_REFRESH_TOKEN, DOMAIN
 from .coordinator import MoenDataUpdateCoordinator
+from .moen_api import MoenApiClient, MoenApiError, MoenAuth, MoenMqttClient
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -45,24 +45,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {}
     try:
-        hass.data[DOMAIN][entry.entry_id][CLIENT] = client = ApiClient(
+        auth = MoenAuth(
             access_token=entry.data[CONF_ACCESS_TOKEN],
             refresh_token=entry.data[CONF_REFRESH_TOKEN],
             session=session,
         )
-    except ApiClientError as err:
+        client = MoenApiClient(auth=auth, session=session)
+        mqtt_client = MoenMqttClient(auth=auth, session=session)
+        hass.data[DOMAIN][entry.entry_id][CLIENT] = client
+    except MoenApiError as err:
         raise ConfigEntryNotReady from err
 
     resp = await client.async_get_devices()
     _LOGGER.debug("INITIAL devices: %s", resp)
 
     hass.data[DOMAIN][entry.entry_id]["devices"] = devices = [
-        MoenDataUpdateCoordinator(hass, client, device["duid"], device)
+        MoenDataUpdateCoordinator(hass, client, mqtt_client, device["duid"], device)
         for device in resp["devices"]
     ]
 
     tasks = [device.async_config_entry_first_refresh() for device in devices]
     await asyncio.gather(*tasks)
+
+    for device in devices:
+        await device.async_start_mqtt()
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -74,19 +80,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         duration = call.data.get("duration", 5)  # Default 5 minutes
 
         # Find the client for the device
-        client = None
+        svc_client = None
         for entry_data in hass.data[DOMAIN].values():
             if isinstance(entry_data, dict) and CLIENT in entry_data:
-                client = entry_data[CLIENT]
+                svc_client = entry_data[CLIENT]
                 break
 
-        if not client:
+        if not svc_client:
             raise ServiceValidationError("No Moen client found")
 
         try:
-            # Create zones dict for manual run - zone_id maps to duration in minutes
             zones = [{"id": zone_id, "duration": duration}]
-            await client.async_manual_run(
+            await svc_client.async_create_manual_plan(
                 device_id=device_id, name="Home Assistant Manual Run", zones=zones
             )
         except Exception as err:
@@ -112,7 +117,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Handle removal of an entry."""
     if unloaded := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        hass.data[DOMAIN].pop(entry.entry_id)
+        entry_data = hass.data[DOMAIN].pop(entry.entry_id)
+        for device in entry_data.get("devices", []):
+            await device.async_shutdown()
     return unloaded
 
 
