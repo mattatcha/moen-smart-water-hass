@@ -120,14 +120,16 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     async def async_start_mqtt(self) -> None:
         """Start MQTT subscription task."""
-        self._mqtt_task = self.hass.async_create_task(
+        self._mqtt_task = self.config_entry.async_create_background_task(
+            self.hass,
             self._mqtt_client.async_connect(
                 client_id=self._client_id,
                 duid=self._device_id,
                 legacy_id=self._legacy_id,
                 shadow_callback=self._subscribe_update_cb,
                 async_callback=self._async_message_cb,
-            )
+            ),
+            name=f"moen_mqtt_{self._device_id}",
         )
 
     async def async_shutdown(self) -> None:

@@ -29,14 +29,17 @@ This is a Home Assistant custom integration for Moen Smart Water Network devices
 ### Code Quality
 
 ```bash
-# Run linter (uses ruff)
-./scripts/lint
+# Run linter (uses ruff via uv)
+uv tool run ruff check .
+
+# Run formatter
+uv tool run ruff format .
 
 # Run tests
-pytest
+uv run pytest
 
 # Run specific test file
-pytest tests/test_sensors.py
+uv run pytest tests/test_sensors.py
 ```
 
 ### Home Assistant Testing
