@@ -37,7 +37,7 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the Flo sensors from config entry."""
+    """Set up the Moen binary sensors from config entry."""
     devices: list[MoenDataUpdateCoordinator] = hass.data[DOMAIN][config_entry.entry_id][
         "devices"
     ]

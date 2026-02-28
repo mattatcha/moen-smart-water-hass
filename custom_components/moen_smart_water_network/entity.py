@@ -1,4 +1,4 @@
-"""BlueprintEntity class."""
+"""Base entity for Moen Smart Water Network."""
 
 from __future__ import annotations
 

@@ -17,8 +17,6 @@ from .exceptions import MoenApiError
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from aiohttp import ClientSession
-
     from .auth import MoenAuth
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,10 +27,9 @@ io.init_logging(io.LogLevel.Warn, "stderr")
 class MoenMqttClient:
     """MQTT client for shadow and async irrigation topic subscriptions."""
 
-    def __init__(self, auth: MoenAuth, session: ClientSession) -> None:
-        """Initialize with auth manager and aiohttp session."""
+    def __init__(self, auth: MoenAuth) -> None:
+        """Initialize with auth manager."""
         self._auth = auth
-        self._session = session
         self._mqtt_connection: mqtt.Connection | None = None
         self._shadow_client: iotshadow.IotShadowClient | None = None
 
@@ -40,14 +37,13 @@ class MoenMqttClient:
         self,
         client_id: str,
         duid: str,
+        legacy_id: str,
         shadow_callback: Callable,
         async_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         """Connect to MQTT and subscribe to shadow + async topics."""
-        user = await self._get_user_for_mqtt()
-
         credentials_provider = self._auth.create_cognito_credentials_provider(
-            user["legacyId"]
+            legacy_id
         )
 
         mqtt_client_id = str(uuid4())
@@ -117,13 +113,6 @@ class MoenMqttClient:
             self._mqtt_connection.disconnect()
             self._mqtt_connection = None
             self._shadow_client = None
-
-    async def _get_user_for_mqtt(self) -> dict:
-        """Fetch user data needed for MQTT authentication."""
-        from .client import MoenApiClient  # noqa: PLC0415
-
-        client = MoenApiClient(self._auth, self._session)
-        return await client.async_get_user()
 
     async def _subscribe_shadow_topics(
         self,

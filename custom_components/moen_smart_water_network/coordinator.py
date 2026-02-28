@@ -29,6 +29,8 @@ from .moen_api.models import (
 )
 
 if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+
     from .moen_api.models import ZoneData
 
 _LOGGER = logging.getLogger(__name__)
@@ -54,13 +56,15 @@ def merge(a: dict, b: dict, path: list | None = None) -> dict:
 class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
     """Class to manage fetching data from the API."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         hass: HomeAssistant,
         client: MoenApiClient,
         mqtt_client: MoenMqttClient,
         device_id: str,
         data: DeviceData,
+        legacy_id: str,
+        config_entry: ConfigEntry,
     ) -> None:
         """Initialize."""
         self.hass: HomeAssistant = hass
@@ -69,6 +73,7 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._manufacturer: str = "Moen"
         self._device_id: str = device_id
         self._device_information: DeviceData = data
+        self._legacy_id: str = legacy_id
         self._schedules: dict[str, Any] = {}
         self._shadow_state: dict[str, Any] = {}
         self._irrigation_run: IrrigationRunMessage | None = None
@@ -78,6 +83,7 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
             logger=LOGGER,
             name=f"{DOMAIN}-{device_id}",
             update_interval=timedelta(seconds=30),
+            config_entry=config_entry,
         )
 
         self._mqtt_task: asyncio.Task[None] | None = None
@@ -108,6 +114,9 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
             if hasattr(msg.state, "reported") and msg.state.reported is not None:
                 reported = msg.state.reported
                 _LOGGER.debug("mqtt: state.reported state: %s", msg.state.reported)
+                self.hass.loop.call_soon_threadsafe(
+                    self._apply_shadow_update, reported
+                )
 
     async def async_start_mqtt(self) -> None:
         """Start MQTT subscription task."""
@@ -115,6 +124,7 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
             self._mqtt_client.async_connect(
                 client_id=self._client_id,
                 duid=self._device_id,
+                legacy_id=self._legacy_id,
                 shadow_callback=self._subscribe_update_cb,
                 async_callback=self._async_message_cb,
             )

@@ -1,4 +1,4 @@
-"""Adds config flow for Blueprint."""
+"""Config flow for Moen Smart Water Network."""
 
 from __future__ import annotations
 

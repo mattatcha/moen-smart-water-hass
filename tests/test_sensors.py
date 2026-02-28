@@ -31,7 +31,7 @@ async def test_sensors(
     aioclient_mock.get(
         API_USER_URL,
         status=200,
-        json={"resp": {"a": "123"}},
+        json={"legacyId": "123"},
     )
 
     assert await async_setup_component(

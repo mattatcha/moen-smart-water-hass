@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
+from homeassistant.const import EntityCategory
 
 from .const import DOMAIN
 from .entity import MoenEntity
@@ -18,11 +19,6 @@ if TYPE_CHECKING:
 
     from .coordinator import MoenDataUpdateCoordinator
     from .moen_api.models import ScheduleData, ZoneData
-
-
-from homeassistant.const import (
-    EntityCategory,
-)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,11 +52,10 @@ async def async_setup_entry(
     async_add_devices(entities)
 
 
-# EntityCategory.CONFIG
 class ZoneEnableSwitch(MoenEntity, SwitchEntity):
-    """moen_smart_water_network switch class."""
+    """Switch to enable or disable an irrigation zone."""
 
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(self, coordinator: MoenDataUpdateCoordinator, data: ZoneData) -> None:
         """Initialize the switch class."""
@@ -146,13 +141,11 @@ class ZoneRunSwitch(MoenEntity, SwitchEntity):
         raise NotImplementedError
 
 
-# EntityCategory.CONFIG
 class ScheduleEnableSwitch(MoenEntity, SwitchEntity):
-    """moen_smart_water_network switch class."""
+    """Switch to enable or disable an irrigation schedule."""
 
     _attr_icon = "mdi:calendar"
-
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(
         self, coordinator: MoenDataUpdateCoordinator, schedule_id: str
