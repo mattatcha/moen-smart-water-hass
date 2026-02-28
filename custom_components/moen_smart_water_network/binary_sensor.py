@@ -155,6 +155,7 @@ class FlowSensorBinarySensor(MoenEntity, BinarySensorEntity):
 class ScheduleActiveBinarySensor(MoenEntity, BinarySensorEntity):
     """Read-only binary sensor for irrigation schedule active state."""
 
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:calendar"
 
     def __init__(

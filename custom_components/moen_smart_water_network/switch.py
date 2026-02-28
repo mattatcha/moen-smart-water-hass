@@ -117,7 +117,7 @@ class ZoneRunSwitch(MoenZoneEntity, SwitchEntity):
 
     async def async_turn_on(self, **_: Any) -> None:
         """Start manual watering on this zone."""
-        duration = self._get_duration()
+        duration = self._get_duration() * 60  # convert minutes to seconds for API
         zones = [{"id": self._zone_full_id, "duration": duration}]
         await self._device.client.async_create_manual_plan(
             device_id=self._device.id,

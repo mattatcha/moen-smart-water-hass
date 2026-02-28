@@ -150,7 +150,7 @@ class ZoneDuration(TypedDict):
     """Zone duration for manual plan requests (APK format)."""
 
     id: str
-    duration: int  # minutes
+    duration: int  # seconds
 
 
 class ManualRunZoneData(TypedDict):
