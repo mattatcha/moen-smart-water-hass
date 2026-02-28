@@ -9,7 +9,7 @@ from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
 )
-from homeassistant.const import EntityCategory, UnitOfSignalStrength, UnitOfTime
+from homeassistant.const import EntityCategory, UnitOfTime
 
 from .const import DOMAIN
 from .entity import MoenEntity
@@ -103,7 +103,7 @@ class RssiSensor(MoenEntity, SensorEntity):
 
     _attr_name = "RSSI"
     _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
-    _attr_native_unit_of_measurement = UnitOfSignalStrength.DECIBELS_MILLIWATT
+    _attr_native_unit_of_measurement = "dBm"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
