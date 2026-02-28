@@ -7,29 +7,58 @@
 [![hacs][hacsbadge]][hacs]
 [![Community Forum][forum-shield]][forum]
 
-_Integration to integrate with [moen_smart_water_network][moen_smart_water_network]._
+Home Assistant custom integration for Moen Smart Water Network irrigation controllers. Communicates with Moen's IoT API and uses AWS IoT MQTT for real-time device state updates.
 
-**This integration will set up the following platforms.**
+## Features
 
-| Platform        | Description                         |
-| --------------- | ----------------------------------- |
-| `binary_sensor` | Show something `True` or `False`.   |
-| `sensor`        | Show info from blueprint API.       |
-| `switch`        | Switch something `True` or `False`. |
+- Real-time irrigation status via AWS IoT MQTT shadow and `/async` topics
+- Zone enable/disable controls
+- Schedule monitoring
+- Device connectivity and watering state sensors
+- Manual watering service
+
+## Platforms
+
+| Platform        | Description                                          |
+| --------------- | ---------------------------------------------------- |
+| `binary_sensor` | Device connectivity and watering state               |
+| `sensor`        | Device status, currently running zone                |
+| `switch`        | Zone enable/disable, zone run status, schedule state |
+
+## Services
+
+| Service                                     | Description                              |
+| ------------------------------------------- | ---------------------------------------- |
+| `moen_smart_water_network.start_watering`   | Start a manual watering run on a zone    |
 
 ## Installation
 
-1. Using the tool of choice open the directory (folder) for your HA configuration (where you find `configuration.yaml`).
-1. If you do not have a `custom_components` directory (folder) there, you need to create it.
-1. In the `custom_components` directory (folder) create a new folder called `moen_smart_water_network`.
-1. Download _all_ the files from the `custom_components/moen_smart_water_network/` directory (folder) in this repository.
-1. Place the files you downloaded in the new directory (folder) you created.
-1. Restart Home Assistant
-1. In the HA UI go to "Configuration" -> "Integrations" click "+" and search for "Integration blueprint"
+1. Copy the `custom_components/moen_smart_water_network/` directory into your Home Assistant `custom_components/` folder.
+2. Restart Home Assistant.
+3. Go to **Settings** -> **Devices & Services** -> **Add Integration** and search for "Moen Smart Water Network".
+4. Enter your Moen OAuth2 access token and refresh token.
 
-## Configuration is done in the UI
+### HACS (recommended)
 
-<!---->
+Add this repository as a custom repository in HACS, then install from there.
+
+## Configuration
+
+Configuration is done via the Home Assistant UI. You will need:
+
+- **Access token** from Moen's OAuth2 flow
+- **Refresh token** for automatic token renewal
+
+Tokens can be obtained by intercepting the Moen mobile app's API traffic.
+
+## Architecture
+
+The integration uses a standalone `moen_api` package that separates:
+
+- **`auth`** — OAuth2 token management and AWS Cognito credential provisioning
+- **`client`** — REST API client for devices, zones, schedules, and irrigation
+- **`mqtt`** — MQTT connection with shadow topics and `/async/{DUID}` for real-time irrigation run updates
+- **`models`** — TypedDict definitions for all API data structures
 
 ## Contributions are welcome!
 
