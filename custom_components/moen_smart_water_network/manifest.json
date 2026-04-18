@@ -4,8 +4,9 @@
   "codeowners": ["@mattatcha"],
   "config_flow": true,
   "documentation": "https://github.com/mattatcha/moen-smart-water-hass",
-  "iot_class": "cloud_polling",
+  "integration_type": "hub",
+  "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/mattatcha/moen-smart-water-hass/issues",
   "version": "0.0.2",
-  "requirements": ["awsiotsdk"]
+  "requirements": ["awsiotsdk>=1.21.0", "awscrt>=0.20.0"]
 }

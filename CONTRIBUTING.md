@@ -42,19 +42,32 @@ Report a bug by [opening a new issue](../../issues/new/choose); it's that easy!
 
 People *love* thorough bug reports. I'm not even kidding.
 
-## Use a Consistent Coding Style
+## Use a consistent coding style
 
-Use [black](https://github.com/ambv/black) to make sure the code follows the style.
+This project uses [ruff](https://github.com/astral-sh/ruff) for linting and
+formatting. Run it with:
 
-## Test your code modification
+```bash
+uv tool run ruff check .
+uv tool run ruff format .
+```
 
-This custom component is based on [integration_blueprint template](https://github.com/ludeeus/integration_blueprint).
+## Test your code modifications
 
-It comes with development environment in a container, easy to launch
-if you use Visual Studio Code. With this container you will have a stand alone
-Home Assistant instance running and already configured with the included
-[`configuration.yaml`](./config/configuration.yaml)
-file.
+The repository ships with a development environment in a container that is
+easy to launch from Visual Studio Code. It provides a standalone Home
+Assistant instance pre-configured with [`config/configuration.yaml`](./config/configuration.yaml).
+
+Run the test suite with:
+
+```bash
+uv run pytest
+```
+
+This integration was originally bootstrapped from the
+[integration_blueprint](https://github.com/ludeeus/integration_blueprint)
+template; the structure may look familiar if you have contributed to other
+HACS integrations.
 
 ## License
 

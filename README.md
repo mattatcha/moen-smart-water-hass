@@ -7,62 +7,166 @@
 [![hacs][hacsbadge]][hacs]
 [![Community Forum][forum-shield]][forum]
 
-Home Assistant custom integration for Moen Smart Water Network irrigation controllers. Communicates with Moen's IoT API and uses AWS IoT MQTT for real-time device state updates.
+Home Assistant custom integration for **Moen Smart Water Network** irrigation
+controllers. Talks to Moen's cloud API for configuration and uses AWS IoT MQTT
+device shadows for real-time state updates.
+
+> ⚠️ **Unofficial.** This project is not affiliated with, endorsed by, or
+> supported by Moen. It is built on top of an undocumented API which may change
+> or break at any time.
 
 ## Features
 
-- Real-time irrigation status via AWS IoT MQTT shadow and `/async` topics
-- Zone enable/disable controls
-- Schedule monitoring
-- Device connectivity and watering state sensors
-- Manual watering service
+- Real-time irrigation status via AWS IoT MQTT device shadow and `/async` topics
+- Per-zone valve and switch entities with configurable run durations
+- Manual watering service for one or more zones
+- Schedule monitoring and a calendar entity for upcoming runs
+- Sensors for connectivity (RSSI), watering mode, currently running zone, and
+  remaining run time
+- Binary sensors for rain sensor, master valve, flow sensor, and active schedule
+
+## Supported devices
+
+This integration has been developed and tested against the **Moen Smart Water
+Irrigation Controller** (the 12-zone model paired with the Moen Smart Water
+mobile app). Other Moen Smart Water products that share the same cloud /
+device-shadow API may also work but are unverified — please open an issue if
+you have one.
 
 ## Platforms
 
-| Platform        | Description                                          |
-| --------------- | ---------------------------------------------------- |
-| `binary_sensor` | Device connectivity and watering state               |
-| `sensor`        | Device status, currently running zone                |
-| `switch`        | Zone enable/disable, zone run status, schedule state |
+| Platform        | Description                                                     |
+| --------------- | --------------------------------------------------------------- |
+| `binary_sensor` | Connectivity, watering, rain sensor, master valve, flow sensor  |
+| `calendar`      | Upcoming scheduled irrigation runs                              |
+| `number`        | Per-zone manual run duration                                    |
+| `sensor`        | Device state, RSSI, running zone, next run, run remaining, mode |
+| `switch`        | Zone enable/disable, manual zone run                            |
+| `valve`         | Zone valve open/close                                           |
 
 ## Services
 
-| Service                                     | Description                              |
-| ------------------------------------------- | ---------------------------------------- |
-| `moen_smart_water_network.start_watering`   | Start a manual watering run on a zone    |
+| Service                                   | Description                           |
+| ----------------------------------------- | ------------------------------------- |
+| `moen_smart_water_network.start_watering` | Start a manual watering run on a zone |
 
 ## Installation
 
-1. Copy the `custom_components/moen_smart_water_network/` directory into your Home Assistant `custom_components/` folder.
-2. Restart Home Assistant.
-3. Go to **Settings** -> **Devices & Services** -> **Add Integration** and search for "Moen Smart Water Network".
-4. Enter your Moen OAuth2 access token and refresh token.
-
 ### HACS (recommended)
 
-Add this repository as a custom repository in HACS, then install from there.
+1. In Home Assistant, go to **HACS** → **Integrations** → menu (⋮) → **Custom
+   repositories**.
+2. Add `https://github.com/mattatcha/moen-smart-water-hass` as type
+   **Integration**.
+3. Install **Moen Smart Water Network** from the HACS list.
+4. Restart Home Assistant.
+5. Go to **Settings** → **Devices & Services** → **Add Integration** and search
+   for *Moen Smart Water Network*.
+
+### Manual
+
+1. Copy `custom_components/moen_smart_water_network/` into your Home Assistant
+   `config/custom_components/` directory.
+2. Restart Home Assistant.
+3. Add the integration via **Settings** → **Devices & Services**.
 
 ## Configuration
 
-Configuration is done via the Home Assistant UI. You will need:
+Configuration is done entirely through the Home Assistant UI. You will be
+asked for two values:
 
-- **Access token** from Moen's OAuth2 flow
-- **Refresh token** for automatic token renewal
+- **Access token** — short-lived bearer token for the Moen API
+- **Refresh token** — long-lived token used to renew the access token
 
-Tokens can be obtained by intercepting the Moen mobile app's API traffic.
+The integration handles token renewal automatically. If renewal eventually
+fails (for example because you signed out of the mobile app or rotated your
+password), Home Assistant will surface a **Reauthenticate** prompt and you can
+paste new tokens without removing the integration.
+
+### Obtaining tokens
+
+Moen does not currently expose a developer API or OAuth client for third-party
+integrations, so tokens have to be extracted from a signed-in session of the
+Moen Smart Water mobile app. The high-level approach:
+
+1. Install a TLS-intercepting HTTP proxy (e.g.
+   [mitmproxy](https://mitmproxy.org/), [Charles](https://www.charlesproxy.com/),
+   or [Proxyman](https://proxyman.io/)) and trust its CA on your phone.
+2. Route your phone's traffic through the proxy.
+3. Sign in to the Moen Smart Water app and look for a `POST` to the Moen OAuth
+   endpoint (`/oauth2/token` on `api.prod.iot.moen.com`).
+4. The JSON response contains `access_token` and `refresh_token` — paste both
+   into the Home Assistant config flow.
+
+If you regenerate tokens (e.g. by signing out of the app), use the
+**Reauthenticate** action in Home Assistant to update them.
+
+## Real-time updates
+
+The integration prefers push over polling:
+
+- An **MQTT subscription** to each device's AWS IoT shadow delivers reported
+  state changes (watering on/off, zone activations, sensor state) within
+  seconds.
+- A `/async/{duid}` topic delivers irrigation run progress (active zone,
+  duration remaining).
+- A periodic poll every 30 seconds backfills device metadata and schedules in
+  case any MQTT messages were missed.
+
+## Troubleshooting
+
+### Enable debug logs
+
+Add the following to `configuration.yaml` and restart:
+
+```yaml
+logger:
+  default: info
+  logs:
+    custom_components.moen_smart_water_network: debug
+```
+
+Then reproduce the problem and download the **Diagnostics** dump from the
+integration's device page. Tokens and account identifiers are redacted
+automatically.
+
+### Common issues
+
+| Symptom                                     | Likely cause / fix                                                                       |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Setup fails with *Invalid auth credentials* | Refresh token has been revoked — sign in to the app again and obtain new tokens.         |
+| Setup fails with *Failed to connect*        | Network/DNS issue reaching `api.prod.iot.moen.com` from Home Assistant.                  |
+| Entities show as *unavailable*              | The device is offline or has lost Wi-Fi. Check the controller's status in the Moen app.  |
+| State updates feel slow                     | MQTT may not be connected — restart the integration and check logs for `mqtt` messages.  |
+| Reauth prompt keeps appearing               | Token rotation kicked you out — paste fresh tokens from the app once more.               |
+
+When opening an issue, please include the diagnostics dump and a debug log.
 
 ## Architecture
 
-The integration uses a standalone `moen_api` package that separates:
+The integration is split into a self-contained API package and standard Home
+Assistant glue:
 
-- **`auth`** — OAuth2 token management and AWS Cognito credential provisioning
-- **`client`** — REST API client for devices, zones, schedules, and irrigation
-- **`mqtt`** — MQTT connection with shadow topics and `/async/{DUID}` for real-time irrigation run updates
-- **`models`** — TypedDict definitions for all API data structures
+- **`moen_api/auth`** — OAuth2 token lifecycle and AWS Cognito credential
+  provider for MQTT
+- **`moen_api/client`** — REST client for devices, zones, schedules, and
+  manual irrigation runs
+- **`moen_api/mqtt`** — AWS IoT MQTT connection (shadow + `/async` topics) for
+  real-time updates
+- **`moen_api/models`** — TypedDict definitions for the API payload shapes
+- **`coordinator`** — `DataUpdateCoordinator` that merges polled and pushed
+  state and exposes computed properties to entities
 
-## Contributions are welcome!
+## Contributing
 
-If you want to contribute to this please read the [Contribution guidelines](CONTRIBUTING.md)
+Contributions are welcome! Please read the
+[contribution guidelines](CONTRIBUTING.md) and run the linter (`uv tool run
+ruff check .`) and tests (`uv run pytest`) before opening a pull request.
+
+## Disclaimer
+
+"Moen" is a trademark of its respective owner. This project is an independent,
+community-maintained integration and uses an undocumented API at your own risk.
 
 ---
 

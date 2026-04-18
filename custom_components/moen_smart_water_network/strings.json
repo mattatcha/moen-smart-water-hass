@@ -3,7 +3,15 @@
     "step": {
       "user": {
         "title": "Moen Smart Water Network",
-        "description": "Configure your Moen Smart Water Network integration",
+        "description": "Provide an access token and refresh token from the Moen Smart Water mobile app. See the integration documentation for instructions on how to obtain these values.",
+        "data": {
+          "access_token": "Access Token",
+          "refresh_token": "Refresh Token"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate Moen Smart Water Network",
+        "description": "Your Moen credentials are no longer valid. Provide a fresh access token and refresh token to reconnect.",
         "data": {
           "access_token": "Access Token",
           "refresh_token": "Refresh Token"
@@ -11,9 +19,13 @@
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect to Moen API",
+      "cannot_connect": "Failed to connect to the Moen API",
       "invalid_auth": "Invalid authentication credentials",
       "unknown": "Unexpected error occurred"
+    },
+    "abort": {
+      "already_configured": "This Moen account is already configured.",
+      "reauth_successful": "Reauthentication was successful."
     }
   },
   "entity": {
