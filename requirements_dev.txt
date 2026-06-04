@@ -1,0 +1,13 @@
+-r requirements.txt
+black
+flake8
+mypy==1.1.1
+pre-commit
+pytest
+pytest-homeassistant-custom-component
+pylint-pytest
+pylint
+pytest-aiohttp
+pytest-asyncio
+types-python-dateutil
+types-pytz

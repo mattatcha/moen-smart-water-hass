@@ -162,11 +162,19 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     async def _async_update_data(self) -> CoordinatorData:
         """Update data via library."""
+        LOGGER.debug("Updating data for %s", self._device_id)
+
+        # The presence "heartbeat" is a best-effort ping to tell Moen we are
+        # online. Moen's API has been returning 400/401 for it, and because it
+        # was the first call in the refresh, its failure aborted the whole
+        # update and marked every entity unavailable. Treat it as non-fatal so
+        # device/schedule data (and the MQTT shadow) keep flowing regardless.
         try:
-            LOGGER.debug("Updating data for %s", self._device_id)
-
             await self.client.async_user_presence()
+        except MoenApiError as exception:
+            LOGGER.debug("User presence update failed (ignored): %s", exception)
 
+        try:
             self._device_information = await self.client.async_get_device(
                 self._device_id
             )
