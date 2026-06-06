@@ -18,6 +18,23 @@ ignore = [
     "TRY003",
 ]
 
+[lint.per-file-ignores]
+# Tests favor readability over the strict "ALL" rule set used for the
+# integration code (mirrors the home-assistant/core test config).
+"tests/**/*" = [
+    "ANN001",  # missing type annotation for function argument (fixtures)
+    "ANN201",  # missing return type annotation
+    "ARG001",  # unused function argument (pytest fixtures)
+    "D103",    # missing docstring in public function
+    "D400",    # first line should end with a period
+    "D415",    # first line should end with punctuation
+    "E501",    # line too long
+    "ERA001",  # commented-out code (reference scaffolding)
+    "PLR2004", # magic value used in comparison
+    "S101",    # use of assert
+    "SLF001",  # private member accessed
+]
+
 [lint.flake8-pytest-style]
 fixture-parentheses = false
 
