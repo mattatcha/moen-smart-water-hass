@@ -1,7 +1,7 @@
 -r requirements.txt
 black
 flake8
-mypy==1.1.1
+mypy==2.1.0
 pre-commit
 pytest
 pytest-homeassistant-custom-component
