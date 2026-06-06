@@ -1,4 +1,5 @@
 """Define fixtures available for all tests."""
+
 import pytest
 from homeassistant.const import CONF_ACCESS_TOKEN
 from pytest_homeassistant_custom_component.common import (

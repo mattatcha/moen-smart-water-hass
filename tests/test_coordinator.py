@@ -86,9 +86,7 @@ async def test_device_communication_failure_still_raises_update_failed(
 ) -> None:
     """A communication failure fetching device data still fails the update."""
     coordinator = _build_coordinator(hass, config_entry)
-    coordinator.client.async_get_device.side_effect = MoenApiCommunicationError(
-        "boom"
-    )
+    coordinator.client.async_get_device.side_effect = MoenApiCommunicationError("boom")
 
     with pytest.raises(UpdateFailed):
         await coordinator._async_update_data()
