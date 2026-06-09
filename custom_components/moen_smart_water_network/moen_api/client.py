@@ -138,17 +138,17 @@ class MoenApiClient:
         params: dict | None = None,
         data: dict | None = None,
     ) -> Any:
-        """Make a request, refreshing auth tokens on 401/403."""
-        refreshed = False
+        """Make a request, re-authenticating on 401/403."""
+        reauthed = False
         for _ in range(2):
             try:
                 return await self._api_wrapper(
                     method=method, url=url, data=data, params=params
                 )
             except MoenApiAuthenticationError:
-                if not refreshed:
-                    await self._auth.async_refresh_token()
-                    refreshed = True
+                if not reauthed:
+                    await self._auth.async_reauthenticate()
+                    reauthed = True
                     continue
                 raise
         return None  # unreachable, satisfies type checker

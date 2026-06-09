@@ -1,18 +1,123 @@
 {
-    "config": {
-        "step": {
-            "user": {
-                "description": "If you need help with the configuration have a look here: https://github.com/ludeeus/integration_blueprint",
-                "data": {
-                    "username": "Username",
-                    "password": "Password"
-                }
-            }
-        },
-        "error": {
-            "auth": "Username/Password is wrong.",
-            "connection": "Unable to connect to the server.",
-            "unknown": "Unknown error occurred."
+  "config": {
+    "step": {
+      "user": {
+        "title": "Moen Smart Water Network",
+        "description": "Choose how to connect to your Moen Smart Water Network account.",
+        "menu_options": {
+          "credentials": "Username and password",
+          "token": "Access and refresh tokens (advanced)"
         }
+      },
+      "credentials": {
+        "title": "Moen account",
+        "description": "Enter your Moen Smart Water Network account email and password. If you sign in with Apple or Google, use the token option instead.",
+        "data": {
+          "username": "Email",
+          "password": "Password"
+        }
+      },
+      "token": {
+        "title": "OAuth tokens",
+        "description": "Paste the access and refresh tokens captured from the Moen app.",
+        "data": {
+          "access_token": "Access Token",
+          "refresh_token": "Refresh Token"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Moen API",
+      "invalid_auth": "Invalid authentication credentials",
+      "unknown": "Unexpected error occurred"
+    },
+    "abort": {
+      "already_configured": "This Moen account is already configured"
     }
+  },
+  "entity": {
+    "binary_sensor": {
+      "connected": {
+        "name": "Connected"
+      },
+      "watering": {
+        "name": "Watering"
+      },
+      "rain_sensor": {
+        "name": "Rain Sensor"
+      },
+      "master_valve": {
+        "name": "Master Valve"
+      },
+      "flow_sensor": {
+        "name": "Flow Sensor"
+      },
+      "schedule_active": {
+        "name": "Schedule Active"
+      }
+    },
+    "sensor": {
+      "state": {
+        "name": "State"
+      },
+      "running_zone": {
+        "name": "Running Zone"
+      },
+      "rssi": {
+        "name": "RSSI"
+      },
+      "next_schedule_run": {
+        "name": "Next Schedule Run"
+      },
+      "run_remaining": {
+        "name": "Run Remaining"
+      },
+      "watering_mode": {
+        "name": "Watering Mode"
+      }
+    },
+    "switch": {
+      "zone_enabled": {
+        "name": "Zone Enabled"
+      },
+      "zone_run": {
+        "name": "Zone Run"
+      }
+    },
+    "valve": {
+      "zone_valve": {
+        "name": "Zone Valve"
+      }
+    },
+    "number": {
+      "zone_run_duration": {
+        "name": "Run Duration"
+      }
+    },
+    "calendar": {
+      "irrigation_calendar": {
+        "name": "Irrigation Calendar"
+      }
+    }
+  },
+  "services": {
+    "start_watering": {
+      "name": "Start watering",
+      "description": "Start manual watering for a specific zone on a Moen irrigation controller.",
+      "fields": {
+        "device_id": {
+          "name": "Device ID",
+          "description": "The device identifier (duid) for the Moen irrigation controller."
+        },
+        "zone_id": {
+          "name": "Zone ID",
+          "description": "The zone identifier to start watering."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "Duration to run watering in minutes."
+        }
+      }
+    }
+  }
 }
