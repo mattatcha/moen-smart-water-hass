@@ -23,7 +23,8 @@ Home Assistant custom integration for Moen Smart Water Network irrigation contro
 | --------------- | ---------------------------------------------------- |
 | `binary_sensor` | Device connectivity and watering state               |
 | `sensor`        | Device status, currently running zone                |
-| `switch`        | Zone enable/disable, zone run status, schedule state |
+| `switch`        | Zone enable/disable, schedule state                  |
+| `valve`         | Start manual watering on a zone, zone run status     |
 
 ## Services
 

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory
 
 from .const import DOMAIN
-from .entity import MoenEntity, MoenZoneEntity
+from .entity import MoenEntity
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -19,8 +18,6 @@ if TYPE_CHECKING:
 
     from .coordinator import MoenDataUpdateCoordinator
     from .moen_api.models import ZoneData
-
-_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -37,7 +34,6 @@ async def async_setup_entry(
             if zone.get("wired") is False:
                 continue
             entities.append(ZoneEnableSwitch(device, zone))
-            entities.append(ZoneRunSwitch(device, zone, entry))
     async_add_devices(entities)
 
 
@@ -88,47 +84,3 @@ class ZoneEnableSwitch(MoenEntity, SwitchEntity):
         """Turn off the switch."""
         await self._device.client.async_disable_zone(self._device.id, self._zone_id)
         await self._device.async_request_refresh()
-
-
-class ZoneRunSwitch(MoenZoneEntity, SwitchEntity):
-    """Switch to start manual watering on an irrigation zone."""
-
-    _attr_icon = "mdi:valve"
-
-    @property
-    def unique_id(self) -> str:
-        """Return a unique id by combining controller id and zone number."""
-        return f"{self._device.id}_zone_{self._zone_number}"
-
-    @property
-    def name(self) -> str:
-        """Return the friendly name of the zone."""
-        return f"{self._zone_name} Zone Run"
-
-    @property
-    def extra_state_attributes(self) -> ZoneData | None:
-        """Return the state attributes of the device."""
-        return self._device.zone_from_client_id(self._zone_number)
-
-    @property
-    def is_on(self) -> bool:
-        """Return true if the switch is on."""
-        return str(self._device.hydra_overview.get("zoneID")) == str(self._zone_number)
-
-    async def async_turn_on(self, **_: Any) -> None:
-        """Start manual watering on this zone."""
-        duration = self._get_duration() * 60  # convert minutes to seconds for API
-        zones = [{"id": self._zone_full_id, "duration": duration}]
-        await self._device.client.async_create_manual_plan(
-            device_id=self._device.id,
-            name="Home Assistant Manual Run",
-            zones=zones,
-        )
-        await self._device.async_request_refresh()
-
-    async def async_turn_off(self, **_: Any) -> None:
-        """Stop watering — not yet supported by the Moen API."""
-        _LOGGER.warning(
-            "Stopping watering is not yet supported by the Moen API for zone %s",
-            self._zone_name,
-        )
