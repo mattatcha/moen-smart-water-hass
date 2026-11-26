@@ -1,0 +1,57 @@
+{
+  "TopTen": [
+    {
+      "day": "2026-04-16T00:00:00.000Z",
+      "capacity": 97,
+      "warnColor": "#E20F42"
+    },
+    {
+      "day": "2026-04-17T00:00:00.000Z",
+      "capacity": 79,
+      "warnColor": "#E20F42"
+    },
+    {
+      "day": "2026-04-18T00:00:00.000Z",
+      "capacity": 62,
+      "warnColor": "#E20F42"
+    },
+    {
+      "day": "2026-04-19T00:00:00.000Z",
+      "capacity": 55,
+      "warnColor": "#E20F42"
+    },
+    {
+      "day": "2026-09-04T00:00:00.000Z",
+      "capacity": 42,
+      "warnColor": "#E20F42"
+    },
+    {
+      "day": "2026-09-04T00:00:00.000Z",
+      "capacity": 41,
+      "warnColor": "#E20F42"
+    },
+    {
+      "day": "2026-09-03T00:00:00.000Z",
+      "capacity": 31,
+      "warnColor": "#FF7740"
+    },
+    {
+      "day": "2026-10-02T00:00:00.000Z",
+      "capacity": 27,
+      "warnColor": "#FF7740"
+    },
+    {
+      "day": "2026-10-03T00:00:00.000Z",
+      "capacity": 9,
+      "warnColor": "#1E2122"
+    },
+    {
+      "day": "2026-10-04T00:00:00.000Z",
+      "capacity": 5,
+      "warnColor": "#1E2122"
+    }
+  ],
+  "pumpSize": 1,
+  "pumpIndicator": "undersized_capacity",
+  "pumpCapacitySufficient": false
+}

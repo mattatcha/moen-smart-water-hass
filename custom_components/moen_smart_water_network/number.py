@@ -8,15 +8,15 @@ from typing import TYPE_CHECKING
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.const import EntityCategory, UnitOfTime
 
-from .const import CONF_ZONE_DURATIONS, DOMAIN
-from .entity import MoenZoneEntity
+from .const import CONF_IRRIGATION_ZONE_DURATIONS
+from .coordinator import MoenIrrigationCoordinator
+from .entity import MoenIrrigationZoneEntity, build_entities
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from .coordinator import MoenDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,20 +27,21 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the number platform."""
-    devices: list[MoenDataUpdateCoordinator] = hass.data[DOMAIN][config_entry.entry_id][
-        "devices"
-    ]
+    async_add_entities(
+        build_entities(
+            hass,
+            config_entry,
+            {
+                MoenIrrigationCoordinator: lambda device: [
+                    IrrigationZoneRunDurationNumber(device, zone, config_entry)
+                    for zone in device.wired_zones()
+                ]
+            },
+        )
+    )
 
-    entities: list[NumberEntity] = []
-    for device in devices:
-        for zone in device.data["device"]["irrigation"]["zones"]:
-            if zone.get("wired") is False:
-                continue
-            entities.append(ZoneRunDurationNumber(device, zone, config_entry))
-    async_add_entities(entities)
 
-
-class ZoneRunDurationNumber(MoenZoneEntity, NumberEntity):
+class IrrigationZoneRunDurationNumber(MoenIrrigationZoneEntity, NumberEntity):
     """Number entity for configuring zone manual run duration."""
 
     _attr_entity_category = EntityCategory.CONFIG
@@ -68,10 +69,12 @@ class ZoneRunDurationNumber(MoenZoneEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the run duration for this zone."""
-        durations = dict(self._config_entry.options.get(CONF_ZONE_DURATIONS, {}))
+        durations = dict(
+            self._config_entry.options.get(CONF_IRRIGATION_ZONE_DURATIONS, {})
+        )
         durations[str(self._zone_number)] = int(value)
         new_options = dict(self._config_entry.options)
-        new_options[CONF_ZONE_DURATIONS] = durations
+        new_options[CONF_IRRIGATION_ZONE_DURATIONS] = durations
         self.hass.config_entries.async_update_entry(
             self._config_entry, options=new_options
         )

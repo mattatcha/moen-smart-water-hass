@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime
 import logging
 import socket
@@ -37,6 +38,7 @@ class MoenAuth:
         self._refresh_token = refresh_token
         self._token_expiration: datetime.datetime | None = None
         self._id_token: str | None = None
+        self._refresh_lock = asyncio.Lock()
 
     @property
     def access_token(self) -> str:
@@ -75,10 +77,11 @@ class MoenAuth:
 
     async def async_ensure_token(self) -> None:
         """Refresh the token if it is expired or about to expire."""
-        if self._token_expiration is None or datetime.datetime.now(
-            tz=datetime.UTC
-        ) >= self._token_expiration - datetime.timedelta(minutes=5):
-            await self.async_refresh_token()
+        async with self._refresh_lock:
+            if self._token_expiration is None or datetime.datetime.now(
+                tz=datetime.UTC
+            ) >= self._token_expiration - datetime.timedelta(minutes=5):
+                await self.async_refresh_token()
 
     def get_auth_headers(self) -> dict[str, str]:
         """Return Authorization headers using the current access token."""

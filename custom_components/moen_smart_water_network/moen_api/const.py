@@ -32,3 +32,26 @@ SHADOW_GET_ACCEPTED_TOPIC = "$aws/things/{thing_name}/shadow/get/accepted"
 SHADOW_UPDATE_ACCEPTED_TOPIC = "$aws/things/{thing_name}/shadow/update/accepted"
 SHADOW_UPDATE_DOCUMENTS_TOPIC = "$aws/things/{thing_name}/shadow/update/documents"
 ASYNC_TOPIC = "/async/{duid}"
+
+# Device types (the "type" field of GET /v3/devices)
+DEVICE_TYPE_HYD = "hyd"  # Smart Sprinkler Controller
+DEVICE_TYPE_NAB = "nab"  # Smart Sump Pump Monitor
+
+# Lambda invoker function names. All sump pump functions take the numeric clientId
+# *as a string*; integer or UUID forms return errors or empty results.
+FN_DEVICE_LIST = "smartwater-app-device-api-prod-list"
+FN_SHADOW_GET = "smartwater-app-shadow-api-prod-get"
+FN_SHADOW_UPDATE = "smartwater-app-shadow-api-prod-update"
+FN_SUMP_PUMP_ENVIRONMENT = "fbgpg_usage_v1_get_device_environment_latest_prod"
+FN_SUMP_PUMP_LAST_USAGE = "fbgpg_usage_v1_get_last_usage_prod"
+FN_SUMP_PUMP_SESSIONS = "fbgpg_usage_v1_get_my_usage_device_history_prod"
+FN_SUMP_PUMP_CAPACITY = "fbgpg_usage_v1_get_my_usage_device_history_top10_prod"
+FN_LATEST_FIRMWARE = "fbgpg_device_v1_device_get_latest_firmware_prod"
+FN_ALERTS_ACTIVE = "fbgpg_alerts_v2_get_alerts_active_by_user_prod"
+
+# Sump pump shadow commands this integration is allowed to send.
+SUMP_PUMP_COMMAND_STREAM_ON = "drop_on"
+SUMP_PUMP_COMMAND_STREAM_OFF = "updates_off"
+SUMP_PUMP_COMMANDS = frozenset(
+    {SUMP_PUMP_COMMAND_STREAM_ON, SUMP_PUMP_COMMAND_STREAM_OFF}
+)

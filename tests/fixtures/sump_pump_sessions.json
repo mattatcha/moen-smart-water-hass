@@ -1,0 +1,17 @@
+{
+  "usage": [
+    {
+      "date": "2026-11-05T08:38:38.669Z",
+      "fillVolume": 0,
+      "fillVolumeUnits": "gpm",
+      "fillTimeMS": 788563000,
+      "emptyVolume": 3.77,
+      "emptyVolumeUnits": "gallons",
+      "emptyTimeMS": 33380,
+      "backupRan": false
+    }
+  ],
+  "nextId": null,
+  "duid": "100000001",
+  "recordCount": 10
+}

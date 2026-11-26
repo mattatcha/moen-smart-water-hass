@@ -1,0 +1,12 @@
+{
+  "lastIncomeVolume": 1065,
+  "lastIncomeTimeMS": 788563000,
+  "lastOutgoVolume": 25619786,
+  "lastOutgoTimeMS": 788563000,
+  "lastOutgoTime": "2026-11-05T08:38:38.669Z",
+  "backupUsed": false,
+  "duid": "100000001",
+  "estimatedNextRunMS": 1140073000,
+  "estimatedTimeUntilNextRunMS": -567765658,
+  "estimatedNextRun": "2026-11-27T16:22:34.669Z"
+}

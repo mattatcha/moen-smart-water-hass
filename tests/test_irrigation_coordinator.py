@@ -1,4 +1,4 @@
-"""Tests for the MoenDataUpdateCoordinator update flow."""
+"""Tests for the MoenIrrigationCoordinator update flow."""
 
 from unittest.mock import AsyncMock, MagicMock
 
@@ -8,7 +8,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.moen_smart_water_network.coordinator import (
-    MoenDataUpdateCoordinator,
+    MoenIrrigationCoordinator,
 )
 from custom_components.moen_smart_water_network.moen_api import (
     MoenApiAuthenticationError,
@@ -16,24 +16,24 @@ from custom_components.moen_smart_water_network.moen_api import (
 )
 
 DEVICE_ID = "dev-1"
-DEVICE_DATA = {"duid": DEVICE_ID, "clientId": "client-1"}
+DEVICE_DATA = {"duid": DEVICE_ID, "clientId": "client-1", "type": "hyd"}
 SCHEDULES = {"items": [{"id": "sched-1"}, {"id": "sched-2"}]}
 
 
-def _build_coordinator(hass: HomeAssistant, config_entry) -> MoenDataUpdateCoordinator:
+def _build_coordinator(hass: HomeAssistant, config_entry) -> MoenIrrigationCoordinator:
     """Build a coordinator with a mocked client and mqtt client."""
     client = MagicMock()
+    client.auth.async_ensure_token = AsyncMock()
     client.async_user_presence = AsyncMock(return_value={})
     client.async_get_device = AsyncMock(return_value=DEVICE_DATA)
-    client.async_get_schedules = AsyncMock(return_value=SCHEDULES)
+    client.async_get_irrigation_schedules = AsyncMock(return_value=SCHEDULES)
+    client.async_get_latest_firmware = AsyncMock(return_value={"latest": "v2"})
 
-    return MoenDataUpdateCoordinator(
+    return MoenIrrigationCoordinator(
         hass=hass,
         client=client,
-        mqtt_client=MagicMock(),
         device_id=DEVICE_ID,
         data=DEVICE_DATA,
-        legacy_id="123",
         config_entry=config_entry,
     )
 
@@ -90,3 +90,31 @@ async def test_device_communication_failure_still_raises_update_failed(
 
     with pytest.raises(UpdateFailed):
         await coordinator._async_update_data()
+
+
+async def test_firmware_checked_once_per_interval(
+    hass: HomeAssistant, config_entry
+) -> None:
+    """The latest-firmware check is throttled, not repeated every update."""
+    coordinator = _build_coordinator(hass, config_entry)
+
+    await coordinator._async_update_data()
+    await coordinator._async_update_data()
+
+    coordinator.client.async_get_latest_firmware.assert_awaited_once_with("client-1")
+    assert coordinator.latest_firmware == {"latest": "v2"}
+
+
+async def test_firmware_failure_does_not_fail_update(
+    hass: HomeAssistant, config_entry
+) -> None:
+    """A failed firmware check leaves the firmware unknown; the update succeeds."""
+    coordinator = _build_coordinator(hass, config_entry)
+    coordinator.client.async_get_latest_firmware.side_effect = (
+        MoenApiCommunicationError("boom")
+    )
+
+    data = await coordinator._async_update_data()
+
+    assert data["device"] == DEVICE_DATA
+    assert coordinator.latest_firmware == {}

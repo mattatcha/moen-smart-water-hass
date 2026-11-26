@@ -35,6 +35,12 @@
       },
       "schedule_active": {
         "name": "Schedule Active"
+      },
+      "ac_power": {
+        "name": "AC power"
+      },
+      "water_detected": {
+        "name": "Water detected"
       }
     },
     "sensor": {
@@ -55,6 +61,66 @@
       },
       "watering_mode": {
         "name": "Watering Mode"
+      },
+      "temperature": {
+        "name": "Temperature"
+      },
+      "humidity": {
+        "name": "Humidity"
+      },
+      "battery": {
+        "name": "Battery"
+      },
+      "last_pump_cycle": {
+        "name": "Last pump cycle"
+      },
+      "estimated_next_pump_cycle": {
+        "name": "Estimated next pump cycle"
+      },
+      "last_cycle_volume": {
+        "name": "Last cycle water out"
+      },
+      "last_cycle_run_time": {
+        "name": "Last cycle pump run time"
+      },
+      "last_cycle_pump_out_rate": {
+        "name": "Last cycle pump-out rate"
+      },
+      "last_cycle_inflow_rate": {
+        "name": "Last cycle water in rate"
+      },
+      "last_cycle_fill_time": {
+        "name": "Last cycle fill time"
+      },
+      "flood_risk": {
+        "name": "Flood risk"
+      },
+      "water_level_trend": {
+        "name": "Water level trend"
+      },
+      "primary_pump_state": {
+        "name": "Primary pump state"
+      },
+      "backup_pump_state": {
+        "name": "Backup pump state"
+      },
+      "water_level": {
+        "name": "Water level"
+      },
+      "primary_pump_capacity": {
+        "name": "Primary pump capacity"
+      },
+      "primary_pump_peak_capacity": {
+        "name": "Primary pump peak capacity"
+      },
+      "backup_pump_test": {
+        "name": "Backup pump test"
+      },
+      "alert_settings": {
+        "name": "Alert settings"
+      },
+      "active_alerts": {
+        "name": "Active alerts"
       }
     },
     "switch": {
@@ -78,6 +144,11 @@
     "calendar": {
       "irrigation_calendar": {
         "name": "Irrigation Calendar"
+      }
+    },
+    "update": {
+      "firmware": {
+        "name": "Firmware"
       }
     }
   },

@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
+    from .coordinator import MoenBaseCoordinator
     from .moen_api import MoenApiClient
 
 TO_REDACT = {
@@ -19,6 +20,10 @@ TO_REDACT = {
     "refresh_token",
     "id_token",
     "legacyId",
+    "federatedIdentity",
+    "cognitoIdentityId",
+    "email",
+    "userId",
 }
 
 
@@ -26,9 +31,15 @@ async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
-    client: MoenApiClient = hass.data[DOMAIN][entry.entry_id][CLIENT]
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    client: MoenApiClient = entry_data[CLIENT]
+    devices: list[MoenBaseCoordinator] = entry_data.get("devices", [])
 
-    devices = await client.async_get_devices()
-    schedules = await client.async_get_schedules(devices["devices"][0]["duid"])
-
-    return async_redact_data({"devices": devices, "schedules": schedules}, TO_REDACT)
+    return async_redact_data(
+        {
+            # Every device on the account, including unsupported types.
+            "devices": await client.async_get_devices(),
+            "coordinators": {device.id: device.diagnostics() for device in devices},
+        },
+        TO_REDACT,
+    )

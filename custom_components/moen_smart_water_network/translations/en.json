@@ -1,18 +1,175 @@
 {
-    "config": {
-        "step": {
-            "user": {
-                "description": "If you need help with the configuration have a look here: https://github.com/ludeeus/integration_blueprint",
-                "data": {
-                    "username": "Username",
-                    "password": "Password"
-                }
-            }
-        },
-        "error": {
-            "auth": "Username/Password is wrong.",
-            "connection": "Unable to connect to the server.",
-            "unknown": "Unknown error occurred."
+  "config": {
+    "step": {
+      "user": {
+        "title": "Moen Smart Water Network",
+        "description": "Configure your Moen Smart Water Network integration",
+        "data": {
+          "access_token": "Access Token",
+          "refresh_token": "Refresh Token"
         }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Moen API",
+      "invalid_auth": "Invalid authentication credentials",
+      "unknown": "Unexpected error occurred"
     }
+  },
+  "entity": {
+    "binary_sensor": {
+      "connected": {
+        "name": "Connected"
+      },
+      "watering": {
+        "name": "Watering"
+      },
+      "rain_sensor": {
+        "name": "Rain Sensor"
+      },
+      "master_valve": {
+        "name": "Master Valve"
+      },
+      "flow_sensor": {
+        "name": "Flow Sensor"
+      },
+      "schedule_active": {
+        "name": "Schedule Active"
+      },
+      "ac_power": {
+        "name": "AC power"
+      },
+      "water_detected": {
+        "name": "Water detected"
+      }
+    },
+    "sensor": {
+      "state": {
+        "name": "State"
+      },
+      "running_zone": {
+        "name": "Running Zone"
+      },
+      "rssi": {
+        "name": "RSSI"
+      },
+      "next_schedule_run": {
+        "name": "Next Schedule Run"
+      },
+      "run_remaining": {
+        "name": "Run Remaining"
+      },
+      "watering_mode": {
+        "name": "Watering Mode"
+      },
+      "temperature": {
+        "name": "Temperature"
+      },
+      "humidity": {
+        "name": "Humidity"
+      },
+      "battery": {
+        "name": "Battery"
+      },
+      "last_pump_cycle": {
+        "name": "Last pump cycle"
+      },
+      "estimated_next_pump_cycle": {
+        "name": "Estimated next pump cycle"
+      },
+      "last_cycle_volume": {
+        "name": "Last cycle water out"
+      },
+      "last_cycle_run_time": {
+        "name": "Last cycle pump run time"
+      },
+      "last_cycle_pump_out_rate": {
+        "name": "Last cycle pump-out rate"
+      },
+      "last_cycle_inflow_rate": {
+        "name": "Last cycle water in rate"
+      },
+      "last_cycle_fill_time": {
+        "name": "Last cycle fill time"
+      },
+      "flood_risk": {
+        "name": "Flood risk"
+      },
+      "water_level_trend": {
+        "name": "Water level trend"
+      },
+      "primary_pump_state": {
+        "name": "Primary pump state"
+      },
+      "backup_pump_state": {
+        "name": "Backup pump state"
+      },
+      "water_level": {
+        "name": "Water level"
+      },
+      "primary_pump_capacity": {
+        "name": "Primary pump capacity"
+      },
+      "primary_pump_peak_capacity": {
+        "name": "Primary pump peak capacity"
+      },
+      "backup_pump_test": {
+        "name": "Backup pump test"
+      },
+      "alert_settings": {
+        "name": "Alert settings"
+      },
+      "active_alerts": {
+        "name": "Active alerts"
+      }
+    },
+    "switch": {
+      "zone_enabled": {
+        "name": "Zone Enabled"
+      },
+      "zone_run": {
+        "name": "Zone Run"
+      }
+    },
+    "valve": {
+      "zone_valve": {
+        "name": "Zone Valve"
+      }
+    },
+    "number": {
+      "zone_run_duration": {
+        "name": "Run Duration"
+      }
+    },
+    "calendar": {
+      "irrigation_calendar": {
+        "name": "Irrigation Calendar"
+      }
+    },
+    "update": {
+      "firmware": {
+        "name": "Firmware"
+      }
+    }
+  },
+  "services": {
+    "start_watering": {
+      "name": "Start watering",
+      "description": "Start manual watering for a specific zone on a Moen irrigation controller.",
+      "fields": {
+        "device_id": {
+          "name": "Device ID",
+          "description": "The device identifier (duid) for the Moen irrigation controller."
+        },
+        "zone_id": {
+          "name": "Zone ID",
+          "description": "The zone identifier to start watering."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "Duration to run watering in minutes."
+        }
+      }
+    }
+  }
 }

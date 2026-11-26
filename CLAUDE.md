@@ -39,7 +39,7 @@ uv tool run ruff format .
 uv run pytest
 
 # Run specific test file
-uv run pytest tests/test_sensors.py
+uv run pytest tests/test_irrigation_sensors.py
 ```
 
 ### Home Assistant Testing

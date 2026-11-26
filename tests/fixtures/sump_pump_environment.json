@@ -1,0 +1,18 @@
+{
+  "tempData": {
+    "unitOfMeasure": "F",
+    "tempLowThreshold": 39.92,
+    "tempHighThreshold": 149.9,
+    "low": 40,
+    "high": 140,
+    "current": 74
+  },
+  "humidData": {
+    "unitOfMeasure": "percent",
+    "humidLowThreshold": 0,
+    "humidHighThreshold": 75,
+    "low": 0,
+    "high": 100,
+    "current": 27
+  }
+}

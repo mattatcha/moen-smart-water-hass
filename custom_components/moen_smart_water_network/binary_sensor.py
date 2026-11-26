@@ -11,15 +11,20 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.const import EntityCategory
 
-from .const import DOMAIN
-from .entity import MoenEntity
+from .coordinator import (
+    MoenBaseCoordinator,
+    MoenIrrigationCoordinator,
+    MoenSumpPumpCoordinator,
+)
+from .entity import MoenEntity, build_entities
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from .coordinator import MoenDataUpdateCoordinator
+# Alert id for "Water Detected" in the sump pump monitor's alert catalog.
+SUMP_PUMP_ALERT_WATER_DETECTED = "250"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,31 +35,54 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Moen binary sensors from config entry."""
-    devices: list[MoenDataUpdateCoordinator] = hass.data[DOMAIN][config_entry.entry_id][
-        "devices"
-    ]
-    entities: list[BinarySensorEntity] = []
-    for device in devices:
-        entities.append(BinarySensor(device))
-        entities.append(WateringBinarySensor(device))
-        entities.append(RainSensorBinarySensor(device))
-        entities.append(MasterValveBinarySensor(device))
-        entities.append(FlowSensorBinarySensor(device))
-        entities.extend(
-            ScheduleActiveBinarySensor(device, sid) for sid in device.data["schedules"]
+    async_add_entities(
+        build_entities(
+            hass,
+            config_entry,
+            {
+                # Every device type reports whether it is connected.
+                MoenBaseCoordinator: lambda device: [ConnectedBinarySensor(device)],
+                MoenIrrigationCoordinator: _irrigation_entities,
+                MoenSumpPumpCoordinator: lambda device: [
+                    AcPowerBinarySensor(device),
+                    SumpPumpWaterDetectedBinarySensor(device),
+                ],
+            },
         )
-    async_add_entities(entities)
+    )
 
 
-class BinarySensor(MoenEntity, BinarySensorEntity):
+def _irrigation_entities(
+    device: MoenIrrigationCoordinator,
+) -> list[BinarySensorEntity]:
+    """Return the binary sensors of a sprinkler controller."""
+    return [
+        IrrigationWateringBinarySensor(device),
+        IrrigationRainSensorBinarySensor(device),
+        IrrigationMasterValveBinarySensor(device),
+        IrrigationFlowSensorBinarySensor(device),
+        *(
+            IrrigationScheduleActiveBinarySensor(device, sid)
+            for sid in device.data["schedules"]
+        ),
+    ]
+
+
+class ConnectedBinarySensor(MoenEntity, BinarySensorEntity):
     """Connected binary sensor."""
 
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
     def name(self) -> str:
         """Return the friendly name of the sensor."""
         return "Connected"
+
+    @property
+    def available(self) -> bool:
+        """Stay available while disconnected so the state can show it."""
+        return self._device.last_update_success
 
     @property
     def unique_id(self) -> str:
@@ -64,10 +92,10 @@ class BinarySensor(MoenEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool:
         """Return true if the binary_sensor is on."""
-        return self._device.data.get("device", {}).get("connected", False)
+        return self._device.connected
 
 
-class WateringBinarySensor(MoenEntity, BinarySensorEntity):
+class IrrigationWateringBinarySensor(MoenEntity, BinarySensorEntity):
     """Watering binary sensor."""
 
     _attr_device_class = BinarySensorDeviceClass.RUNNING
@@ -88,7 +116,7 @@ class WateringBinarySensor(MoenEntity, BinarySensorEntity):
         return self._device.is_watering
 
 
-class RainSensorBinarySensor(MoenEntity, BinarySensorEntity):
+class IrrigationRainSensorBinarySensor(MoenEntity, BinarySensorEntity):
     """Rain sensor connected binary sensor."""
 
     _attr_device_class = BinarySensorDeviceClass.MOISTURE
@@ -109,7 +137,7 @@ class RainSensorBinarySensor(MoenEntity, BinarySensorEntity):
         return self._device.rain_sensor_connected
 
 
-class MasterValveBinarySensor(MoenEntity, BinarySensorEntity):
+class IrrigationMasterValveBinarySensor(MoenEntity, BinarySensorEntity):
     """Master valve connected binary sensor."""
 
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
@@ -130,7 +158,7 @@ class MasterValveBinarySensor(MoenEntity, BinarySensorEntity):
         return self._device.master_valve_connected
 
 
-class FlowSensorBinarySensor(MoenEntity, BinarySensorEntity):
+class IrrigationFlowSensorBinarySensor(MoenEntity, BinarySensorEntity):
     """Flow sensor connected binary sensor."""
 
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
@@ -152,14 +180,14 @@ class FlowSensorBinarySensor(MoenEntity, BinarySensorEntity):
         return self._device.flow_sensor_connected
 
 
-class ScheduleActiveBinarySensor(MoenEntity, BinarySensorEntity):
+class IrrigationScheduleActiveBinarySensor(MoenEntity, BinarySensorEntity):
     """Read-only binary sensor for irrigation schedule active state."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:calendar"
 
     def __init__(
-        self, coordinator: MoenDataUpdateCoordinator, schedule_id: str
+        self, coordinator: MoenIrrigationCoordinator, schedule_id: str
     ) -> None:
         """Initialize the binary sensor."""
         self._id = schedule_id
@@ -195,4 +223,59 @@ class ScheduleActiveBinarySensor(MoenEntity, BinarySensorEntity):
         return (
             self._device.data.get("schedules", {}).get(self._id, {}).get("status")
             == "active"
+        )
+
+
+class AcPowerBinarySensor(MoenEntity, BinarySensorEntity):
+    """
+    Whether the device is on mains (AC) power.
+
+    Reads ``powerSource`` from the device shadow (``"ac"`` when on mains).
+    """
+
+    _attr_device_class = BinarySensorDeviceClass.POWER
+    _attr_translation_key = "ac_power"
+
+    def __init__(self, device: MoenBaseCoordinator) -> None:
+        """Initialize the binary sensor."""
+        super().__init__(device)
+        self._attr_unique_id = f"{device.id}_ac_power"
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return true when the device reports AC power."""
+        source = self._device.shadow.get("powerSource")
+        if source is None:
+            return None
+        return source == "ac"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return the raw power source."""
+        return {"power_source": self._device.shadow.get("powerSource")}
+
+
+class SumpPumpWaterDetectedBinarySensor(MoenEntity, BinarySensorEntity):
+    """
+    Water detected, from an active "Water Detected" alert.
+
+    Matches the sump pump monitor's alert id (``SUMP_PUMP_ALERT_WATER_DETECTED``);
+    other device types may number their alerts differently.
+    """
+
+    _attr_device_class = BinarySensorDeviceClass.MOISTURE
+    _attr_translation_key = "water_detected"
+
+    def __init__(self, device: MoenSumpPumpCoordinator) -> None:
+        """Initialize the binary sensor."""
+        super().__init__(device)
+        self._attr_unique_id = f"{device.id}_water_detected"
+
+    @property
+    def is_on(self) -> bool:
+        """Return true while a "Water Detected" alert is active."""
+        return any(
+            str(alert.get("id")) == SUMP_PUMP_ALERT_WATER_DETECTED
+            and str(alert.get("state", "")).startswith("active")
+            for alert in self._device.alerts
         )

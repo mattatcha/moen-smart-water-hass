@@ -1,0 +1,65 @@
+{
+  "state": {
+    "desired": {
+      "crockState": "normal",
+      "crockBackup": "present",
+      "dispLanguage": "en-us",
+      "safetyModeEnabled": true,
+      "safetyLimitTemp": 48.89,
+      "childModeEnabled": false,
+      "childLimitTemp": 40.56
+    },
+    "reported": {
+      "wifiNoPoll": false,
+      "connected": true,
+      "wifiNetwork": "TestNetwork",
+      "upgradeUri": "wqsgtm6qz3.execute-api.us-east-2.amazonaws.com/prod/device/firmware/nab",
+      "firmwareVersion": "v1.0.8w",
+      "crockBckTst": "none",
+      "bckTstResults": {
+        "status": "none",
+        "timestamp": "1970-01-01T00:00:00.000Z"
+      },
+      "droplet": {
+        "level": -1,
+        "trend": "stable",
+        "floodRisk": "unknown",
+        "primaryState": "unknown",
+        "backupState": "unknown"
+      },
+      "crockTofDistance": -1,
+      "crockState": "normal",
+      "crockDiameterMM": 457,
+      "crockBackup": "present",
+      "crockTofHeight": 0,
+      "crockStream": true,
+      "humidHighThreshold": 75,
+      "humidLowThreshold": 0,
+      "tempHighThreshold": 65.5,
+      "tempLowThreshold": 4.4,
+      "beeperPiezoEnable": true,
+      "beeperSirenEnable": true,
+      "dispLanguage": "en-us",
+      "tempScale": "fahren",
+      "devDevice": false,
+      "powerSource": "ac",
+      "batteryPercentage": 90,
+      "batteryLifeRemaining": -1,
+      "playback": {
+        "state": "idle",
+        "filename": "none"
+      },
+      "systemState": "normal",
+      "lastConnect": 1795417620824,
+      "wifiRssi": -55
+    },
+    "delta": {
+      "safetyModeEnabled": true,
+      "safetyLimitTemp": 48.89,
+      "childModeEnabled": false,
+      "childLimitTemp": 40.56
+    }
+  },
+  "version": 834522,
+  "timestamp": 1795575372
+}

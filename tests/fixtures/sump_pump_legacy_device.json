@@ -1,0 +1,71 @@
+{
+  "duid": "nab-duid-0001",
+  "nickname": "Sump Pump Monitor",
+  "federatedIdentity": "us-east-2:00000000-0000-0000-0000-000000000000",
+  "deviceType": "NAB",
+  "createdAt": 1743979609895,
+  "locationId": "location-0001",
+  "userPresenceExp": 1795575396,
+  "updatedAt": 1795575361316,
+  "pumpInfo": {
+    "backup": {
+      "batteryNeedsWater": false,
+      "batteryWaterLevelCheckReminder": "quarterly",
+      "installDate": "2017-06-06T22:47:00.000Z",
+      "manufacturer": "The Basement Watchdog",
+      "model": "BWE (2002-2011)",
+      "pumpTestFrequency": "monthly"
+    },
+    "hasBackupPump": true,
+    "main": {
+      "crockDiameter": 15,
+      "installDate": "2016-09-28T22:47:00.000Z",
+      "manufacturer": "Zoeller",
+      "model": "M53"
+    },
+    "mainPumpDesignedToRunContinuously": false
+  },
+  "clientId": "100000001",
+  "wifiNoPoll": false,
+  "connected": true,
+  "wifiNetwork": "TestNetwork",
+  "upgradeUri": "wqsgtm6qz3.execute-api.us-east-2.amazonaws.com/prod/device/firmware/nab",
+  "firmwareVersion": "v1.0.8w",
+  "crockBckTst": "none",
+  "bckTstResults": {
+    "status": "none",
+    "timestamp": "1970-01-01T00:00:00.000Z"
+  },
+  "droplet": {
+    "level": -1,
+    "trend": "stable",
+    "floodRisk": "unknown",
+    "primaryState": "unknown",
+    "backupState": "unknown"
+  },
+  "crockTofDistance": -1,
+  "crockState": "normal",
+  "crockDiameterMM": 457,
+  "crockBackup": "present",
+  "crockTofHeight": 0,
+  "crockStream": true,
+  "humidHighThreshold": 75,
+  "humidLowThreshold": 0,
+  "tempHighThreshold": 65.5,
+  "tempLowThreshold": 4.4,
+  "beeperPiezoEnable": true,
+  "beeperSirenEnable": true,
+  "dispLanguage": "en-us",
+  "tempScale": "fahren",
+  "devDevice": false,
+  "powerSource": "ac",
+  "batteryPercentage": 90,
+  "batteryLifeRemaining": -1,
+  "playback": {
+    "state": "idle",
+    "filename": "none"
+  },
+  "systemState": "normal",
+  "lastConnect": 1795417620824,
+  "wifiRssi": -55
+}
