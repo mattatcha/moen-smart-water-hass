@@ -15,15 +15,30 @@ Home Assistant custom integration for Moen Smart Water Network irrigation contro
 - Zone enable/disable controls
 - Schedule monitoring
 - Device connectivity and watering state sensors
+- Wireless soil sensors: moisture at 1, 3, and 5 inches, soil temperature, battery, and signal
+- Rain sensor, watering restriction, zone fault, active alert, and seasonal adjustment status
 - Manual watering service
 
 ## Platforms
 
-| Platform        | Description                                          |
-| --------------- | ---------------------------------------------------- |
-| `binary_sensor` | Device connectivity and watering state               |
-| `sensor`        | Device status, currently running zone                |
-| `switch`        | Zone enable/disable, zone run status, schedule state |
+| Platform        | Description                                                                                  |
+| --------------- | -------------------------------------------------------------------------------------------- |
+| `binary_sensor` | Device connectivity, watering state, rain, watering restricted, zone faults, schedule state  |
+| `sensor`        | Device status, running zone, next run, active alerts, seasonal adjustment, zone last watered |
+| `switch`        | Zone enable/disable, zone run status                                                         |
+
+### Soil sensors
+
+Each wireless soil sensor paired to a controller is added as its own device, shown as connected via the controller. Each one has these entities:
+
+| Entity                   | Notes                                                                        |
+| ------------------------ | ---------------------------------------------------------------------------- |
+| Moisture (1, 3, 5 in)    | Percent. Attributes: linked zone and its watering-skip threshold             |
+| Soil Temperature         | Attribute: linked zone's skip threshold, in °C                               |
+| Battery                  | Diagnostic                                                                   |
+| Signal Strength          | Diagnostic, disabled by default                                              |
+| Last Report              | Diagnostic                                                                   |
+| Connected                | Diagnostic                                                                   |
 
 ## Services
 
