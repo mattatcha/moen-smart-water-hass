@@ -1,0 +1,109 @@
+{
+  "duid": "ctrl-0001",
+  "clientId": "100000001",
+  "nickname": "Smart Sprinkler Controller",
+  "type": "hyd",
+  "location": {"id": "loc-0001"},
+  "connected": true,
+  "lastConnect": "2026-11-23T07:06:55.526Z",
+  "isDevDevice": false,
+  "connectivity": {"type": "wifi", "net": "TestNet", "rssi": -40},
+  "firmware": {"version": "v1.0.6d", "upgradeUri": "example.invalid/firmware/hyd"},
+  "powerSource": "ac",
+  "irrigation": {
+    "lastAuditDate": "1970-01-21T14:32:49.165Z",
+    "numZones": 3,
+    "wateringState": {"running": false},
+    "masterValveConnected": true,
+    "wateringMode": "off",
+    "seasonalAdjust": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120],
+    "rainSensor": {"connected": true, "type": "closed"},
+    "flowSensor": {"connected": false, "unit": "kFactor", "kFactor": 1, "offset": 0},
+    "zones": [
+      {
+        "id": "ctrl-0001_1",
+        "clientId": "1",
+        "wired": true,
+        "media": [],
+        "auditStatus": "normal",
+        "auditEnabled": true,
+        "type": "lawn",
+        "name": "Front Yard",
+        "enabled": true,
+        "connected": true,
+        "soilSensors": [
+          {"clientId": 7001, "tempThreshold": 3, "depth1Threshold": 90, "depth3Threshold": 80, "depth5Threshold": 75}
+        ],
+        "skipOnRainSensor": true
+      },
+      {
+        "id": "ctrl-0001_2",
+        "clientId": "2",
+        "wired": true,
+        "media": [],
+        "auditStatus": "fault",
+        "auditEnabled": true,
+        "fault": "current_low",
+        "type": "shrubs",
+        "name": "Back Beds",
+        "enabled": true,
+        "connected": true,
+        "soilSensors": [
+          {"clientId": 7002, "tempThreshold": 4, "depth1Threshold": 100, "depth3Threshold": 95, "depth5Threshold": 90}
+        ],
+        "skipOnRainSensor": true
+      },
+      {
+        "id": "ctrl-0001_8",
+        "clientId": "8",
+        "wired": false,
+        "media": [],
+        "auditStatus": "fault",
+        "auditEnabled": true,
+        "fault": "current_low",
+        "type": "lawn",
+        "name": "Zone 8",
+        "enabled": true,
+        "connected": false,
+        "skipOnRainSensor": true
+      }
+    ],
+    "soilSensors": [
+      {
+        "duid": "soil-0001",
+        "nickname": "Front Yard",
+        "clientId": "7001",
+        "type": "slsr",
+        "parent": {"duid": "ctrl-0001"},
+        "powerSource": "battery",
+        "connected": true,
+        "firmwareVersion": "1",
+        "soilSensor": {"depth1": 84.035156, "depth3": 63.799576, "depth5": 52.030415, "temp": 8, "lastReport": "2026-11-26T20:53:06.000Z"},
+        "battery": {"percentage": 100},
+        "connectivity": {"rssi": -94, "type": "unk"},
+        "zonesLinked": ["ctrl-0001_1"]
+      },
+      {
+        "duid": "soil-0002",
+        "nickname": "Back Beds",
+        "clientId": "7002",
+        "type": "slsr",
+        "parent": {"duid": "ctrl-0001"},
+        "powerSource": "battery",
+        "connected": false,
+        "firmwareVersion": "-1",
+        "soilSensor": {"depth1": 70.272705, "depth3": 89.41658, "depth5": 96.244705, "temp": 31, "lastReport": "2026-09-06T21:54:41.000Z"},
+        "battery": {"percentage": 40},
+        "connectivity": {"rssi": -92, "type": "unk"},
+        "zonesLinked": ["ctrl-0001_2"]
+      }
+    ]
+  },
+  "alertsDigest": {
+    "total": 2,
+    "breakdown": [
+      {"severity": "warning", "state": {"active": true, "localAck": false, "remoteAck": false, "suppressed": false}, "count": 1},
+      {"severity": "critical", "state": {"active": false, "localAck": true, "remoteAck": true, "suppressed": false}, "count": 1}
+    ]
+  }
+}

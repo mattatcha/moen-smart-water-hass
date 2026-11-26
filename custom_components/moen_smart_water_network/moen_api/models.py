@@ -53,6 +53,62 @@ class FlowSensorData(TypedDict):
     mLPerPulse: float
 
 
+class ZoneSoilSensorConfig(TypedDict, total=False):
+    """Skip thresholds for a soil sensor linked to a zone."""
+
+    clientId: int
+    tempThreshold: float  # degrees Celsius
+    depth1Threshold: float  # moisture percent
+    depth3Threshold: float
+    depth5Threshold: float
+
+
+class SoilSensorReadings(TypedDict, total=False):
+    """Latest readings reported by a wireless soil sensor."""
+
+    depth1: float  # moisture percent at 1 inch
+    depth3: float  # moisture percent at 3 inches
+    depth5: float  # moisture percent at 5 inches
+    temp: float  # degrees Celsius
+    lastReport: str
+
+
+class SoilSensorBatteryData(TypedDict, total=False):
+    """Soil sensor battery state."""
+
+    percentage: int
+
+
+class SoilSensorConnectivityData(TypedDict, total=False):
+    """Soil sensor radio link state."""
+
+    rssi: int
+    type: str
+
+
+class SoilSensorParentData(TypedDict, total=False):
+    """Controller a soil sensor is paired to."""
+
+    duid: str
+
+
+class SoilSensorData(TypedDict, total=False):
+    """Wireless soil sensor paired to an irrigation controller."""
+
+    duid: str
+    nickname: str
+    clientId: str
+    type: str
+    parent: SoilSensorParentData
+    powerSource: str
+    connected: bool
+    firmwareVersion: str
+    soilSensor: SoilSensorReadings
+    battery: SoilSensorBatteryData
+    connectivity: SoilSensorConnectivityData
+    zonesLinked: list[str]
+
+
 class ZoneData(TypedDict):
     """Individual irrigation zone data."""
 
@@ -86,6 +142,7 @@ class ZoneData(TypedDict):
     allowableWaterContent: float | None
     managementAllowedDepletion: int | None
     rootDepth: int | None
+    soilSensors: list[ZoneSoilSensorConfig]
 
 
 class IrrigationData(TypedDict):
@@ -100,7 +157,31 @@ class IrrigationData(TypedDict):
     rainSensor: RainSensorData
     flowSensor: FlowSensorData
     zones: list[ZoneData]
-    soilSensors: list[Any]
+    soilSensors: list[SoilSensorData]
+
+
+class AlertsBreakdownState(TypedDict, total=False):
+    """State of a group of alerts in an alerts digest."""
+
+    active: bool
+    localAck: bool
+    remoteAck: bool
+    suppressed: bool
+
+
+class AlertsBreakdown(TypedDict, total=False):
+    """Alert count for one severity (and state) in an alerts digest."""
+
+    severity: str
+    state: AlertsBreakdownState
+    count: int
+
+
+class AlertsDigest(TypedDict, total=False):
+    """Summary of a device's alerts."""
+
+    total: int
+    breakdown: list[AlertsBreakdown]
 
 
 class DeviceData(TypedDict):
@@ -118,6 +199,7 @@ class DeviceData(TypedDict):
     firmware: FirmwareData
     powerSource: str
     irrigation: IrrigationData
+    alertsDigest: AlertsDigest
 
 
 # --- User / auth ---

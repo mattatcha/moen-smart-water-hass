@@ -19,6 +19,7 @@ from homeassistant.exceptions import (
     ServiceValidationError,
 )
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import CLIENT, CONF_REFRESH_TOKEN, DOMAIN
@@ -127,6 +128,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     for device in devices:
         await device.async_start_mqtt()
+
+    # Register each controller before its entities so devices that reach Home
+    # Assistant through it (soil sensors, via_device) can always resolve it.
+    device_registry = dr.async_get(hass)
+    for device in devices:
+        device.registry_device_id = device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, device.id)},
+            manufacturer=device.manufacturer,
+            name=device.device_name.capitalize(),
+            sw_version=device.data["device"].get("firmware", {}).get("version"),
+        ).id
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 

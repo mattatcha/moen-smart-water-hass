@@ -1,5 +1,12 @@
 """Define fixtures available for all tests."""
 
+import copy
+import json
+from collections.abc import AsyncGenerator
+from pathlib import Path
+from typing import Any
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from homeassistant.const import CONF_ACCESS_TOKEN
 from pytest_homeassistant_custom_component.common import (
@@ -10,6 +17,10 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import (
 )
 
 from custom_components.moen_smart_water_network.const import CONF_REFRESH_TOKEN, DOMAIN
+from custom_components.moen_smart_water_network.moen_api import (
+    MoenApiClient,
+    MoenMqttClient,
+)
 
 pytest_plugins = "pytest_homeassistant_custom_component"
 
@@ -186,3 +197,67 @@ def mock_responses(api_responses: list[str]) -> list[AiohttpClientMockResponse]:
 #             }
 #         },
 #     )
+
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def load_json_fixture(name: str) -> Any:
+    """Load a JSON fixture from tests/fixtures."""
+    return json.loads((FIXTURES / name).read_text())
+
+
+@pytest.fixture(name="irrigation_device")
+def mock_irrigation_device() -> dict[str, Any]:
+    """Return a fresh copy of the irrigation controller device payload."""
+    return load_json_fixture("v3_device_irrigation.json")
+
+
+@pytest.fixture(name="irrigation_schedules")
+def mock_irrigation_schedules() -> dict[str, Any]:
+    """Return the irrigation schedules payload (none by default)."""
+    return {"items": [], "total": 0, "params": {}}
+
+
+@pytest.fixture(name="setup_irrigation")
+async def setup_irrigation_fixture(
+    hass, config_entry, irrigation_device, irrigation_schedules
+) -> AsyncGenerator[Any]:
+    """
+    Set up the integration with one irrigation controller and return it.
+
+    The REST client and MQTT are mocked; ``/v3/devices`` returns the device
+    without add-ons (like the real API) and ``/v3/device/{duid}`` returns it
+    with soil sensors.
+    """
+    listed = copy.deepcopy(irrigation_device)
+    listed["irrigation"].pop("soilSensors", None)
+
+    with (
+        patch.object(
+            MoenApiClient, "async_get_user", AsyncMock(return_value={"legacyId": "1"})
+        ),
+        patch.object(
+            MoenApiClient,
+            "async_get_devices",
+            AsyncMock(return_value={"devices": [listed], "count": 1}),
+        ),
+        patch.object(
+            MoenApiClient,
+            "async_get_device",
+            AsyncMock(side_effect=lambda _duid: copy.deepcopy(irrigation_device)),
+        ),
+        patch.object(
+            MoenApiClient,
+            "async_get_schedules",
+            AsyncMock(side_effect=lambda _duid: copy.deepcopy(irrigation_schedules)),
+        ),
+        patch.object(MoenApiClient, "async_user_presence", AsyncMock(return_value={})),
+        patch.object(MoenMqttClient, "async_connect", AsyncMock(return_value=None)),
+        patch.object(MoenMqttClient, "async_disconnect", AsyncMock(return_value=None)),
+    ):
+        config_entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+        yield hass.data[DOMAIN][config_entry.entry_id]["devices"][0]
+        assert await hass.config_entries.async_unload(config_entry.entry_id)

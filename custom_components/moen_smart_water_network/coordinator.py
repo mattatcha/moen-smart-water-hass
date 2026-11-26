@@ -32,9 +32,69 @@ from .moen_api.models import (
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
 
-    from .moen_api.models import ZoneData
+    from .moen_api.models import (
+        ScheduleData,
+        SoilSensorData,
+        ZoneData,
+        ZoneSoilSensorConfig,
+    )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Used when a schedule's zones carry no durations, so it still gets a window.
+DEFAULT_SCHEDULE_DURATION = timedelta(minutes=30)
+
+# Irrigation run timestamps above this are milliseconds rather than seconds.
+_MS_TIMESTAMP_THRESHOLD = 10**11
+
+
+def parse_time_of_day(value: str | None) -> tuple[int, int] | None:
+    """Parse an ``HH:MM[:SS]`` string into ``(hour, minute)``."""
+    if not value:
+        return None
+    try:
+        parts = value.split(":")
+        return int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
+    except (ValueError, IndexError):
+        return None
+
+
+def schedule_total_duration(schedule: ScheduleData) -> timedelta:
+    """Return the total planned run time of a schedule (zone durations are s)."""
+    seconds = sum(zone.get("duration", 0) for zone in schedule.get("zones", []))
+    return timedelta(seconds=seconds) if seconds > 0 else DEFAULT_SCHEDULE_DURATION
+
+
+def schedule_run_window(
+    schedule: ScheduleData, day: datetime
+) -> tuple[datetime, datetime] | None:
+    """
+    Return the ``(start, end)`` of a schedule's run anchored on ``day``.
+
+    A schedule either starts at ``preferredTime.startAt`` or must finish by
+    ``preferredTime.endBefore``. For ``endBefore`` the end is exact and the
+    start is estimated from the zone durations; cycle/soak and seasonal adjust
+    make the real start differ.
+    """
+    preferred = schedule.get("preferredTime") or {}
+    duration = schedule_total_duration(schedule)
+
+    if (start := parse_time_of_day(preferred.get("startAt"))) is not None:
+        start_dt = day.replace(hour=start[0], minute=start[1], second=0, microsecond=0)
+        return start_dt, start_dt + duration
+
+    if (end := parse_time_of_day(preferred.get("endBefore"))) is not None:
+        end_dt = day.replace(hour=end[0], minute=end[1], second=0, microsecond=0)
+        return end_dt - duration, end_dt
+
+    return None
+
+
+def _timestamp_to_datetime(ts: float) -> datetime:
+    """Convert an irrigation run timestamp (seconds or milliseconds) to UTC."""
+    if ts > _MS_TIMESTAMP_THRESHOLD:
+        ts = ts / 1000
+    return dt_util.utc_from_timestamp(ts)
 
 
 def merge(a: dict, b: dict, path: list | None = None) -> dict:
@@ -78,6 +138,9 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._schedules: dict[str, Any] = {}
         self._shadow_state: dict[str, Any] = {}
         self._irrigation_run: IrrigationRunMessage | None = None
+        self._zone_last_watered: dict[str, datetime] = {}
+        # Home Assistant device registry id, set once the device is registered.
+        self.registry_device_id: str | None = None
 
         super().__init__(
             hass=hass,
@@ -158,7 +221,45 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
     def _apply_irrigation_run(self, message: dict[str, Any]) -> None:
         """Apply irrigation run update on the event loop."""
         self._irrigation_run = message
+        self._record_completed_zones(message)
         self.async_update_listeners()
+
+    def _record_completed_zones(self, message: IrrigationRunMessage) -> None:
+        """Remember when each zone last finished watering in a run."""
+        completed = message.get("body", {}).get("state", {}).get("completed", [])
+        for entry in completed:
+            zone = self._zone_for_run_entry(entry.get("zoneId"))
+            if zone is None:
+                continue
+            if str(entry.get("status", "")).lower() == "skipped":
+                continue
+            if entry.get("actualDuration", 1) <= 0:
+                continue
+            ts = entry.get("ts") or message.get("ts")
+            finished = (
+                _timestamp_to_datetime(ts) if ts is not None else dt_util.utcnow()
+            )
+            previous = self._zone_last_watered.get(zone["clientId"])
+            if previous is None or finished > previous:
+                self._zone_last_watered[zone["clientId"]] = finished
+
+    def _zone_for_run_entry(self, zone_id: object) -> ZoneData | None:
+        """Resolve an irrigation run ``zoneId`` (client or full id) to a zone."""
+        if zone_id is None:
+            return None
+        zone_id = str(zone_id)
+        return next(
+            (
+                zone
+                for zone in self.zones()
+                if zone_id in (zone.get("clientId"), zone.get("id"))
+            ),
+            None,
+        )
+
+    def zone_last_watered(self, client_id: str) -> datetime | None:
+        """Return when a zone last finished watering, seen since startup."""
+        return self._zone_last_watered.get(str(client_id))
 
     async def _async_update_data(self) -> CoordinatorData:
         """Update data via library."""
@@ -270,6 +371,89 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
         return self._shadow_state.get("hydraOverview", {})
 
     @property
+    def rain_detected(self) -> bool | None:
+        """
+        Return True if the rain sensor reports rain, None if unknown.
+
+        Only ``"dry"`` has been observed, so anything else counts as rain.
+        """
+        rain = self.hydra_overview.get("rain")
+        if rain is None:
+            return None
+        return str(rain).lower() != "dry"
+
+    @property
+    def watering_restricted(self) -> bool | None:
+        """Return True if watering is currently restricted, None if unknown."""
+        restricted = self.hydra_overview.get("restricted")
+        return None if restricted is None else bool(restricted)
+
+    @property
+    def active_alert_counts(self) -> dict[str, int]:
+        """Return active alert counts keyed by severity."""
+        counts: dict[str, int] = {}
+        digest = self._device_information.get("alertsDigest") or {}
+        for group in digest.get("breakdown") or []:
+            if not group.get("state", {}).get("active", True):
+                continue
+            severity = str(group.get("severity", "unknown"))
+            counts[severity] = counts.get(severity, 0) + int(group.get("count", 0))
+        return counts
+
+    @property
+    def active_alert_count(self) -> int | None:
+        """Return the number of active alerts, None if not reported."""
+        digest = self._device_information.get("alertsDigest")
+        if digest is None:
+            return None
+        if digest.get("breakdown") is None:
+            return digest.get("total")
+        return sum(self.active_alert_counts.values())
+
+    @property
+    def seasonal_adjustment(self) -> int | None:
+        """Return this month's seasonal adjustment percentage."""
+        adjust = self._device_information.get("irrigation", {}).get("seasonalAdjust")
+        month = dt_util.now().month
+        if not adjust or len(adjust) < month:
+            return None
+        return adjust[month - 1]
+
+    def soil_sensors(self) -> list[SoilSensorData]:
+        """Return the wireless soil sensors paired to this controller."""
+        return self._device_information.get("irrigation", {}).get("soilSensors") or []
+
+    def soil_sensor(self, duid: str) -> SoilSensorData | None:
+        """Return a soil sensor by its duid."""
+        return next(
+            (sensor for sensor in self.soil_sensors() if sensor.get("duid") == duid),
+            None,
+        )
+
+    def soil_sensor_zone(self, duid: str) -> ZoneData | None:
+        """Return the zone a soil sensor is linked to."""
+        sensor = self.soil_sensor(duid)
+        if sensor is None:
+            return None
+        linked = sensor.get("zonesLinked") or []
+        return next((zone for zone in self.zones() if zone.get("id") in linked), None)
+
+    def soil_sensor_zone_config(self, duid: str) -> ZoneSoilSensorConfig | None:
+        """Return the linked zone's skip thresholds for a soil sensor."""
+        sensor = self.soil_sensor(duid)
+        zone = self.soil_sensor_zone(duid)
+        if sensor is None or zone is None:
+            return None
+        return next(
+            (
+                config
+                for config in zone.get("soilSensors") or []
+                if str(config.get("clientId")) == str(sensor.get("clientId"))
+            ),
+            None,
+        )
+
+    @property
     def irrigation_run(self) -> IrrigationRunMessage | None:
         """Return the latest irrigation run message from /async topic."""
         return self._irrigation_run
@@ -349,30 +533,21 @@ class MoenDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
         for schedule in self._schedules.values():
             if schedule.get("status") != "active":
                 continue
-            start_at = schedule.get("preferredTime", {}).get("startAt")
-            if not start_at:
-                continue
-            try:
-                time_parts = start_at.split(":")
-                run_hour = int(time_parts[0])
-                run_minute = int(time_parts[1]) if len(time_parts) > 1 else 0
-            except (ValueError, IndexError):
-                continue
 
-            for day_offset in range(14):
-                candidate = now + timedelta(days=day_offset)
-                candidate = candidate.replace(
-                    hour=run_hour,
-                    minute=run_minute,
-                    second=0,
-                    microsecond=0,
-                )
-                if candidate <= now:
+            # Day 0 through 14 inclusive: an endBefore run anchored on a later
+            # day can start before that day begins.
+            for day_offset in range(15):
+                day = now + timedelta(days=day_offset)
+                if not self.matches_schedule_day(day, schedule):
                     continue
-                if not self.matches_schedule_day(candidate, schedule):
+                window = schedule_run_window(schedule, day)
+                if window is None:
+                    break
+                start, _ = window
+                if start <= now:
                     continue
-                if next_run is None or candidate < next_run:
-                    next_run = candidate
+                if next_run is None or start < next_run:
+                    next_run = start
                 break
 
         return next_run

@@ -10,7 +10,7 @@ from homeassistant.components.calendar import CalendarEntity, CalendarEvent
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
-from .coordinator import MoenDataUpdateCoordinator
+from .coordinator import MoenDataUpdateCoordinator, schedule_run_window
 from .entity import MoenEntity
 
 if TYPE_CHECKING:
@@ -37,50 +37,30 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-def _parse_start_time(start_at: str) -> tuple[int, int] | None:
-    """Parse a HH:MM time string into (hour, minute)."""
-    try:
-        parts = start_at.split(":")
-        return int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
-    except (ValueError, IndexError):
-        return None
-
-
-def _schedule_total_duration(schedule: ScheduleData) -> int:
-    """Compute total duration in minutes for all zones in a schedule."""
-    return sum(z.get("duration", 0) for z in schedule.get("zones", []))
-
-
 def _events_for_schedule(
     schedule: ScheduleData,
     start_date: datetime,
     end_date: datetime,
 ) -> list[CalendarEvent]:
-    """Generate CalendarEvent objects for a schedule within a date range."""
+    """Generate the events of a schedule that overlap a date range."""
     if schedule.get("status") != "active":
         return []
 
-    start_at = schedule.get("preferredTime", {}).get("startAt")
-    if not start_at:
-        return []
-
-    parsed = _parse_start_time(start_at)
-    if parsed is None:
-        return []
-    run_hour, run_minute = parsed
-
-    total_minutes = _schedule_total_duration(schedule)
-    if total_minutes <= 0:
-        total_minutes = 30  # fallback
-
     events: list[CalendarEvent] = []
-    current = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    # Start a day early: a run anchored on one day can overlap the range from
+    # the day before (and an endBefore run can start the previous evening).
+    current = (start_date - timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    last_day = end_date + timedelta(days=1)
 
-    while current <= end_date:
+    while current <= last_day:
         if MoenDataUpdateCoordinator.matches_schedule_day(current, schedule):
-            event_start = current.replace(hour=run_hour, minute=run_minute)
-            if start_date <= event_start <= end_date:
-                event_end = event_start + timedelta(minutes=total_minutes)
+            window = schedule_run_window(schedule, current)
+            if window is None:
+                return []
+            event_start, event_end = window
+            if event_end > start_date and event_start < end_date:
                 events.append(
                     CalendarEvent(
                         summary=schedule.get("name", "Irrigation"),
@@ -110,9 +90,9 @@ class IrrigationCalendar(MoenEntity, CalendarEntity):
 
     @property
     def event(self) -> CalendarEvent | None:
-        """Return the next upcoming or active event."""
+        """Return the active event, or the next upcoming one."""
         now = dt_util.now()
-        end = now + timedelta(days=14)
+        end = now + timedelta(days=15)
 
         next_event: CalendarEvent | None = None
         schedules: dict[str, ScheduleData] = self._device.data.get("schedules", {})
