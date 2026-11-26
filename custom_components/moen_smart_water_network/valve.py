@@ -11,15 +11,14 @@ from homeassistant.components.valve import (
     ValveEntityFeature,
 )
 
-from .const import DOMAIN
-from .entity import MoenZoneEntity
+from .coordinator import MoenIrrigationCoordinator
+from .entity import MoenIrrigationZoneEntity, build_entities
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from .coordinator import MoenDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,20 +29,21 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the valve platform."""
-    devices: list[MoenDataUpdateCoordinator] = hass.data[DOMAIN][config_entry.entry_id][
-        "devices"
-    ]
+    async_add_entities(
+        build_entities(
+            hass,
+            config_entry,
+            {
+                MoenIrrigationCoordinator: lambda device: [
+                    IrrigationZoneValve(device, zone, config_entry)
+                    for zone in device.wired_zones()
+                ]
+            },
+        )
+    )
 
-    entities: list[ValveEntity] = []
-    for device in devices:
-        for zone in device.data["device"]["irrigation"]["zones"]:
-            if zone.get("wired") is False:
-                continue
-            entities.append(ZoneValve(device, zone, config_entry))
-    async_add_entities(entities)
 
-
-class ZoneValve(MoenZoneEntity, ValveEntity):
+class IrrigationZoneValve(MoenIrrigationZoneEntity, ValveEntity):
     """Valve entity representing an irrigation zone."""
 
     _attr_device_class = ValveDeviceClass.WATER
@@ -69,7 +69,7 @@ class ZoneValve(MoenZoneEntity, ValveEntity):
         """Open the valve (start watering)."""
         duration = self._get_duration()
         zones = [{"id": self._zone_full_id, "duration": duration}]
-        await self._device.client.async_create_manual_plan(
+        await self._device.client.async_create_irrigation_manual_plan(
             device_id=self._device.id,
             name="Home Assistant Manual Run",
             zones=zones,

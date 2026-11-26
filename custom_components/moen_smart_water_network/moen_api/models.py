@@ -28,21 +28,21 @@ class FirmwareData(TypedDict):
     upgradeUri: str
 
 
-class WateringStateData(TypedDict):
+class IrrigationWateringStateData(TypedDict):
     """Current watering state."""
 
     running: bool
 
 
-class RainSensorData(TypedDict):
+class IrrigationRainSensorData(TypedDict):
     """Rain sensor configuration."""
 
     connected: bool
     type: str
 
 
-class FlowSensorData(TypedDict):
-    """Flow sensor configuration."""
+class IrrigationFlowSensorData(TypedDict):
+    """Sprinkler controller flow sensor configuration."""
 
     connected: bool
     unit: str
@@ -53,7 +53,7 @@ class FlowSensorData(TypedDict):
     mLPerPulse: float
 
 
-class ZoneData(TypedDict):
+class IrrigationZoneData(TypedDict):
     """Individual irrigation zone data."""
 
     id: str
@@ -93,18 +93,24 @@ class IrrigationData(TypedDict):
 
     lastAuditDate: str
     numZones: int
-    wateringState: WateringStateData
+    wateringState: IrrigationWateringStateData
     masterValveConnected: bool
     wateringMode: str
     seasonalAdjust: list[int]
-    rainSensor: RainSensorData
-    flowSensor: FlowSensorData
-    zones: list[ZoneData]
+    rainSensor: IrrigationRainSensorData
+    flowSensor: IrrigationFlowSensorData
+    zones: list[IrrigationZoneData]
     soilSensors: list[Any]
 
 
-class DeviceData(TypedDict):
-    """Complete device data from Moen API."""
+class DeviceData(TypedDict, total=False):
+    """
+    Device data from the Moen v3 API.
+
+    Which keys are present depends on the device type: only ``hyd`` devices
+    have ``irrigation``, and ``flo`` devices have no ``firmware`` or
+    ``connected``.
+    """
 
     duid: str
     clientId: str
@@ -146,29 +152,29 @@ class AuthResponse(TypedDict):
 # --- Request types ---
 
 
-class ZoneDuration(TypedDict):
+class IrrigationZoneDuration(TypedDict):
     """Zone duration for manual plan requests (APK format)."""
 
     id: str
     duration: int  # seconds
 
 
-class ManualRunZoneData(TypedDict):
+class IrrigationManualRunZoneData(TypedDict):
     """Zone data for legacy manual run requests."""
 
     dur: int
 
 
-class ManualRunData(TypedDict):
+class IrrigationManualRunData(TypedDict):
     """Manual run request data."""
 
     duid: str
     ttl: int
-    zones: dict[str, ManualRunZoneData]
+    zones: dict[str, IrrigationManualRunZoneData]
     name: str
 
 
-class ZoneEnableData(TypedDict):
+class IrrigationZoneEnableData(TypedDict):
     """Zone enable/disable request data."""
 
     enabled: bool
@@ -194,7 +200,7 @@ class AppShadowRequest(TypedDict):
 # --- Schedule types ---
 
 
-class ScheduleZoneData(TypedDict):
+class IrrigationScheduleZoneData(TypedDict):
     """Schedule zone configuration."""
 
     duration: int
@@ -204,14 +210,14 @@ class ScheduleZoneData(TypedDict):
     smartAdjust: Literal["none", "weather"]
 
 
-class PreferredTimeData(TypedDict, total=False):
+class IrrigationPreferredTimeData(TypedDict, total=False):
     """Schedule preferred time configuration."""
 
     startAt: str
     endBefore: str
 
 
-class ScheduleData(TypedDict):
+class IrrigationScheduleData(TypedDict):
     """Individual irrigation schedule data."""
 
     id: str
@@ -219,9 +225,9 @@ class ScheduleData(TypedDict):
     duid: str
     status: Literal["active", "inactive"]
     frequency: Literal["daily", "weekly", "even", "odd"]
-    zones: list[ScheduleZoneData]
+    zones: list[IrrigationScheduleZoneData]
     startDate: str
-    preferredTime: PreferredTimeData
+    preferredTime: IrrigationPreferredTimeData
     createdAt: str
     modifiedAt: str
     cycleSoak: bool
@@ -236,10 +242,10 @@ class ScheduleData(TypedDict):
 # --- Response types ---
 
 
-class SchedulesResponse(TypedDict):
+class IrrigationSchedulesResponse(TypedDict):
     """Response from schedules API endpoint."""
 
-    items: list[ScheduleData]
+    items: list[IrrigationScheduleData]
     total: int
     params: dict[str, Any]
 
@@ -309,8 +315,158 @@ class IrrigationRunMessage(TypedDict, total=False):
 # --- Coordinator data ---
 
 
-class CoordinatorData(TypedDict):
-    """Data structure returned by MoenDataUpdateCoordinator."""
+class IrrigationCoordinatorData(TypedDict):
+    """Data returned by MoenIrrigationCoordinator."""
 
     device: DeviceData
-    schedules: dict[str, ScheduleData]
+    schedules: dict[str, IrrigationScheduleData]
+
+
+# --- Sump pump monitor (type "nab"), shapes as observed from the live API ---
+
+
+class SumpPumpDroplet(TypedDict, total=False):
+    """Water level state; only populated while the device is streaming."""
+
+    level: int  # -1 when not streaming; no unit is published
+    trend: str  # e.g. "stable"
+    floodRisk: str  # "unknown" when not streaming, e.g. "normal"
+    primaryState: str  # "unknown" when not streaming, e.g. "operational"
+    backupState: str  # "unknown" when not streaming, e.g. "operational"
+
+
+class SumpPumpBackupTestResult(TypedDict, total=False):
+    """Result of the last backup pump test."""
+
+    status: str  # "none" when never run
+    timestamp: str  # ISO 8601; epoch 0 when never run
+
+
+class SumpPumpReportedState(TypedDict, total=False):
+    """Fields seen in a sump pump monitor's shadow ``state.reported``."""
+
+    connected: bool
+    wifiNetwork: str
+    wifiRssi: int
+    firmwareVersion: str
+    powerSource: str  # "ac" on mains power
+    batteryPercentage: int
+    batteryLifeRemaining: int
+    systemState: str
+    crockState: str
+    crockBackup: str
+    crockDiameterMM: int
+    crockBckTst: str  # backup test schedule; "none" = testing disabled
+    bckTstResults: SumpPumpBackupTestResult
+    droplet: SumpPumpDroplet
+    crockTofDistance: int
+    beeperPiezoEnable: bool
+    beeperSirenEnable: bool
+    tempLowThreshold: float  # degrees Celsius
+    tempHighThreshold: float  # degrees Celsius
+    humidLowThreshold: float
+    humidHighThreshold: float
+    lastConnect: int  # epoch milliseconds
+
+
+class ShadowState(TypedDict, total=False):
+    """AWS IoT shadow ``state`` block."""
+
+    reported: dict[str, Any]
+    desired: dict[str, Any]
+    delta: dict[str, Any]
+
+
+class ShadowDocument(TypedDict, total=False):
+    """AWS IoT shadow document returned by the shadow-get Lambda."""
+
+    state: ShadowState
+    metadata: dict[str, Any]
+    version: int
+    timestamp: int
+
+
+class SumpPumpEnvironmentReading(TypedDict, total=False):
+    """One environment reading; thresholds are in ``unitOfMeasure``."""
+
+    unitOfMeasure: str  # "F" or "percent"
+    current: float
+    low: float  # gauge minimum
+    high: float  # gauge maximum
+    tempLowThreshold: float
+    tempHighThreshold: float
+    humidLowThreshold: float
+    humidHighThreshold: float
+
+
+class SumpPumpEnvironment(TypedDict, total=False):
+    """Latest temperature and humidity."""
+
+    tempData: SumpPumpEnvironmentReading
+    humidData: SumpPumpEnvironmentReading
+
+
+class SumpPumpLastUsage(TypedDict, total=False):
+    """Last pump cycle summary; empty when the device has no cycles."""
+
+    duid: str
+    lastOutgoTime: str  # ISO 8601, when the last pump-out cycle happened
+    backupUsed: bool
+    estimatedNextRun: str  # ISO 8601
+    estimatedTimeUntilNextRunMS: int
+
+
+class SumpPumpSession(TypedDict, total=False):
+    """One pump cycle (app History card)."""
+
+    date: str  # ISO 8601
+    fillVolume: float  # "Water In" rate
+    fillVolumeUnits: str  # "gpm"
+    fillTimeMS: int  # "Water In" duration
+    emptyVolume: float  # "Water Out" volume
+    emptyVolumeUnits: str  # "gallons"
+    emptyTimeMS: int  # "Water Out" duration (pump run time)
+    backupRan: bool
+
+
+class SumpPumpCapacityDay(TypedDict, total=False):
+    """One of the primary pump's highest capacity days."""
+
+    day: str  # ISO 8601
+    capacity: int  # percent
+    warnColor: str
+
+
+class SumpPumpCapacity(TypedDict, total=False):
+    """Primary pump capacity assessment (app "Pump Capacity" card)."""
+
+    TopTen: list[SumpPumpCapacityDay]
+    pumpSize: int
+    pumpIndicator: str  # e.g. "undersized_capacity"
+    pumpCapacitySufficient: bool
+
+
+class ActiveAlert(TypedDict, total=False):
+    """An active alert from the v2 alerts Lambda."""
+
+    id: str
+    duid: str  # numeric clientId as a string
+    time: str
+    state: str  # e.g. "active_unlack_unrack_unsuppressed"
+    severity: str
+    title: str
+    text: str
+    dismiss: bool
+    silence: bool
+
+
+class SumpPumpCoordinatorData(TypedDict):
+    """Data structure returned by MoenSumpPumpCoordinator."""
+
+    device: DeviceData
+    shadow: dict[str, Any]  # shadow state.reported
+    environment: SumpPumpEnvironment
+    last_usage: SumpPumpLastUsage
+    last_session: SumpPumpSession | None
+    capacity: SumpPumpCapacity
+    alerts: list[ActiveAlert]

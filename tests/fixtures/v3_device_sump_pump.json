@@ -1,0 +1,25 @@
+{
+  "duid": "nab-duid-0001",
+  "clientId": "100000001",
+  "nickname": "Sump Pump Monitor",
+  "type": "nab",
+  "location": {
+    "id": "location-0001"
+  },
+  "connected": true,
+  "lastConnect": "2026-11-23T07:07:00.824Z",
+  "isDevDevice": false,
+  "connectivity": {
+    "type": "wifi",
+    "net": "TestNetwork",
+    "rssi": -55
+  },
+  "firmware": {
+    "version": "v1.0.8w",
+    "upgradeUri": "wqsgtm6qz3.execute-api.us-east-2.amazonaws.com/prod/device/firmware/nab"
+  },
+  "powerSource": "ac",
+  "battery": {
+    "percentage": 90
+  }
+}

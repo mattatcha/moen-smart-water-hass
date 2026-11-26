@@ -9,16 +9,15 @@ from typing import TYPE_CHECKING
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
-from .coordinator import MoenDataUpdateCoordinator
-from .entity import MoenEntity
+from .coordinator import MoenIrrigationCoordinator
+from .entity import MoenEntity, build_entities
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from .moen_api.models import ScheduleData
+    from .moen_api.models import IrrigationScheduleData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,12 +28,13 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the calendar platform."""
-    devices: list[MoenDataUpdateCoordinator] = hass.data[DOMAIN][config_entry.entry_id][
-        "devices"
-    ]
-
-    entities = [IrrigationCalendar(device) for device in devices]
-    async_add_entities(entities)
+    async_add_entities(
+        build_entities(
+            hass,
+            config_entry,
+            {MoenIrrigationCoordinator: lambda device: [IrrigationCalendar(device)]},
+        )
+    )
 
 
 def _parse_start_time(start_at: str) -> tuple[int, int] | None:
@@ -46,13 +46,13 @@ def _parse_start_time(start_at: str) -> tuple[int, int] | None:
         return None
 
 
-def _schedule_total_duration(schedule: ScheduleData) -> int:
+def _schedule_total_duration(schedule: IrrigationScheduleData) -> int:
     """Compute total duration in minutes for all zones in a schedule."""
     return sum(z.get("duration", 0) for z in schedule.get("zones", []))
 
 
 def _events_for_schedule(
-    schedule: ScheduleData,
+    schedule: IrrigationScheduleData,
     start_date: datetime,
     end_date: datetime,
 ) -> list[CalendarEvent]:
@@ -77,7 +77,7 @@ def _events_for_schedule(
     current = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
 
     while current <= end_date:
-        if MoenDataUpdateCoordinator.matches_schedule_day(current, schedule):
+        if MoenIrrigationCoordinator.matches_schedule_day(current, schedule):
             event_start = current.replace(hour=run_hour, minute=run_minute)
             if start_date <= event_start <= end_date:
                 event_end = event_start + timedelta(minutes=total_minutes)
@@ -115,7 +115,9 @@ class IrrigationCalendar(MoenEntity, CalendarEntity):
         end = now + timedelta(days=14)
 
         next_event: CalendarEvent | None = None
-        schedules: dict[str, ScheduleData] = self._device.data.get("schedules", {})
+        schedules: dict[str, IrrigationScheduleData] = self._device.data.get(
+            "schedules", {}
+        )
 
         for schedule in schedules.values():
             events = _events_for_schedule(schedule, now, end)
@@ -132,7 +134,9 @@ class IrrigationCalendar(MoenEntity, CalendarEntity):
         end_date: datetime,
     ) -> list[CalendarEvent]:
         """Return calendar events within a date range."""
-        schedules: dict[str, ScheduleData] = self._device.data.get("schedules", {})
+        schedules: dict[str, IrrigationScheduleData] = self._device.data.get(
+            "schedules", {}
+        )
         events: list[CalendarEvent] = []
 
         for schedule in schedules.values():

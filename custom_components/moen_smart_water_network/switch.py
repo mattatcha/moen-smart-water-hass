@@ -8,17 +8,15 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory
 
-from .const import DOMAIN
-from .entity import MoenEntity, MoenZoneEntity
+from .coordinator import MoenIrrigationCoordinator
+from .entity import MoenEntity, MoenIrrigationZoneEntity, build_entities
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
-    from homeassistant.helpers.entity import Entity
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from .coordinator import MoenDataUpdateCoordinator
-    from .moen_api.models import ZoneData
+    from .moen_api.models import IrrigationZoneData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,27 +24,33 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_devices: AddEntitiesCallback
 ) -> None:
-    """Set up the sensor platform."""
-    devices: list[MoenDataUpdateCoordinator] = hass.data[DOMAIN][entry.entry_id][
-        "devices"
-    ]
+    """Set up the switch platform."""
+    async_add_devices(
+        build_entities(
+            hass,
+            entry,
+            {
+                MoenIrrigationCoordinator: lambda device: [
+                    switch
+                    for zone in device.wired_zones()
+                    for switch in (
+                        IrrigationZoneEnableSwitch(device, zone),
+                        IrrigationZoneRunSwitch(device, zone, entry),
+                    )
+                ]
+            },
+        )
+    )
 
-    entities: list[Entity] = []
-    for device in devices:
-        for zone in device.data["device"]["irrigation"]["zones"]:
-            if zone.get("wired") is False:
-                continue
-            entities.append(ZoneEnableSwitch(device, zone))
-            entities.append(ZoneRunSwitch(device, zone, entry))
-    async_add_devices(entities)
 
-
-class ZoneEnableSwitch(MoenEntity, SwitchEntity):
+class IrrigationZoneEnableSwitch(MoenEntity, SwitchEntity):
     """Switch to enable or disable an irrigation zone."""
 
     _attr_entity_category = EntityCategory.CONFIG
 
-    def __init__(self, coordinator: MoenDataUpdateCoordinator, data: ZoneData) -> None:
+    def __init__(
+        self, coordinator: MoenIrrigationCoordinator, data: IrrigationZoneData
+    ) -> None:
         """Initialize the switch class."""
         self._zone_name = data["name"]
         self._zone_id = data["clientId"]
@@ -67,7 +71,7 @@ class ZoneEnableSwitch(MoenEntity, SwitchEntity):
         return f"{self._zone_name} Zone Enabled"
 
     @property
-    def extra_state_attributes(self) -> ZoneData | None:
+    def extra_state_attributes(self) -> IrrigationZoneData | None:
         """Return the state attributes of the device."""
         return self._device.zone_from_client_id(self._zone_id)
 
@@ -81,16 +85,20 @@ class ZoneEnableSwitch(MoenEntity, SwitchEntity):
 
     async def async_turn_on(self, **_: Any) -> None:
         """Turn on the switch."""
-        await self._device.client.async_enable_zone(self._device.id, self._zone_id)
+        await self._device.client.async_enable_irrigation_zone(
+            self._device.id, self._zone_id
+        )
         await self._device.async_request_refresh()
 
     async def async_turn_off(self, **_: Any) -> None:
         """Turn off the switch."""
-        await self._device.client.async_disable_zone(self._device.id, self._zone_id)
+        await self._device.client.async_disable_irrigation_zone(
+            self._device.id, self._zone_id
+        )
         await self._device.async_request_refresh()
 
 
-class ZoneRunSwitch(MoenZoneEntity, SwitchEntity):
+class IrrigationZoneRunSwitch(MoenIrrigationZoneEntity, SwitchEntity):
     """Switch to start manual watering on an irrigation zone."""
 
     _attr_icon = "mdi:valve"
@@ -106,7 +114,7 @@ class ZoneRunSwitch(MoenZoneEntity, SwitchEntity):
         return f"{self._zone_name} Zone Run"
 
     @property
-    def extra_state_attributes(self) -> ZoneData | None:
+    def extra_state_attributes(self) -> IrrigationZoneData | None:
         """Return the state attributes of the device."""
         return self._device.zone_from_client_id(self._zone_number)
 
@@ -119,7 +127,7 @@ class ZoneRunSwitch(MoenZoneEntity, SwitchEntity):
         """Start manual watering on this zone."""
         duration = self._get_duration() * 60  # convert minutes to seconds for API
         zones = [{"id": self._zone_full_id, "duration": duration}]
-        await self._device.client.async_create_manual_plan(
+        await self._device.client.async_create_irrigation_manual_plan(
             device_id=self._device.id,
             name="Home Assistant Manual Run",
             zones=zones,

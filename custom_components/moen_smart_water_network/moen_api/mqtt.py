@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from dataclasses import dataclass
+from functools import partial
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -12,10 +14,12 @@ from awscrt import io, mqtt
 from awsiot import iotshadow, mqtt_connection_builder
 
 from .const import ASYNC_TOPIC, MQTT_ENDPOINT, MQTT_REGION
-from .exceptions import MoenApiError
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from concurrent.futures import Future
+
+    from awscrt.auth import AwsCredentialsProvider
 
     from .auth import MoenAuth
 
@@ -23,168 +27,215 @@ _LOGGER = logging.getLogger(__name__)
 
 io.init_logging(io.LogLevel.Warn, "stderr")
 
+# Retry delay after a failed connection attempt; doubles up to the maximum.
+# Once connected, awscrt reconnects on its own.
+RETRY_MIN_SECONDS = 30
+RETRY_MAX_SECONDS = 600
+# Upper bound for connecting and subscribing every device.
+CONNECT_TIMEOUT_SECONDS = 60
+
+
+@dataclass(frozen=True, slots=True)
+class _Device:
+    """MQTT topics and callbacks for one device."""
+
+    thing_name: str
+    duid: str
+    shadow_callback: Callable[[Any], None]
+    async_callback: Callable[[dict[str, Any]], None] | None
+
 
 class MoenMqttClient:
-    """MQTT client for shadow and async irrigation topic subscriptions."""
+    """
+    One AWS IoT MQTT connection shared by every device on an account.
 
-    def __init__(self, auth: MoenAuth) -> None:
-        """Initialize with auth manager."""
+    Register devices with ``add_device``, then run ``async_run`` as a
+    background task. Cancelling the task disconnects.
+    """
+
+    def __init__(self, auth: MoenAuth, legacy_id: str) -> None:
+        """Initialize with the auth manager and the account's legacy id."""
         self._auth = auth
-        self._mqtt_connection: mqtt.Connection | None = None
+        self._legacy_id = legacy_id
+        self._devices: list[_Device] = []
+        self._connection: mqtt.Connection | None = None
         self._shadow_client: iotshadow.IotShadowClient | None = None
 
-    async def async_connect(
+    def add_device(
         self,
-        client_id: str,
+        thing_name: str,
         duid: str,
-        legacy_id: str,
-        shadow_callback: Callable,
+        shadow_callback: Callable[[Any], None],
         async_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
-        """Connect to MQTT and subscribe to shadow + async topics."""
-        credentials_provider = self._auth.create_cognito_credentials_provider(legacy_id)
+        """Register a device's shadow and ``/async/{duid}`` topics."""
+        self._devices.append(_Device(thing_name, duid, shadow_callback, async_callback))
 
-        mqtt_client_id = str(uuid4())
-        _LOGGER.debug("MQTT client id: %s", mqtt_client_id)
+    async def async_run(self) -> None:
+        """Connect and subscribe, retrying until it works; stay connected."""
+        delay = RETRY_MIN_SECONDS
+        failed = False
+        try:
+            while True:
+                try:
+                    async with asyncio.timeout(CONNECT_TIMEOUT_SECONDS):
+                        await self._async_connect_and_subscribe()
+                    break
+                # Any failure (token refresh, credentials, network, subscribe
+                # timeout) is retried; the REST polling keeps entities updating.
+                except Exception as err:  # noqa: BLE001
+                    self._disconnect()
+                    log = _LOGGER.debug if failed else _LOGGER.warning
+                    log("MQTT connection failed, retrying in %ss: %s", delay, err)
+                    failed = True
+                    await asyncio.sleep(delay)
+                    delay = min(delay * 2, RETRY_MAX_SECONDS)
+            if failed:
+                _LOGGER.info("MQTT connected")
+            await asyncio.Event().wait()
+        finally:
+            self._disconnect()
 
-        loop = asyncio.get_running_loop()
-
-        def _create_mqtt_connection() -> mqtt.Connection:
-            return mqtt_connection_builder.websockets_with_default_aws_signing(
-                region=MQTT_REGION,
-                endpoint=MQTT_ENDPOINT,
-                credentials_provider=credentials_provider,
-                client_id=mqtt_client_id,
-                clean_session=False,
-                keep_alive_secs=30,
-                on_connection_interrupted=lambda connection, error, **kwargs: (
-                    _LOGGER.debug("MQTT connection interrupted: %s", error)
-                ),
-                on_connection_failure=lambda connection, callback_data, **kwargs: (
-                    _LOGGER.error("MQTT connection failure: %s", callback_data)
-                ),
-                on_connection_resumed=(
-                    lambda connection, return_code, session_present, **kwargs: (
-                        _LOGGER.debug("MQTT connection resumed: %s", return_code)
-                    )
-                ),
-                on_connection_success=lambda callback_data, **kwargs: _LOGGER.debug(
-                    "MQTT connection success: %s", callback_data
-                ),
-                on_connection_closed=lambda connection, callback_data, **kwargs: (
-                    _LOGGER.debug("MQTT connection closed: %s", callback_data)
-                ),
-            )
-
-        self._mqtt_connection = await loop.run_in_executor(
-            None, _create_mqtt_connection
+    async def _async_connect_and_subscribe(self) -> None:
+        """Open the connection, subscribe every device, request each shadow."""
+        # Cognito credentials need the id token, which only a refresh sets.
+        await self._auth.async_ensure_token()
+        credentials_provider = self._auth.create_cognito_credentials_provider(
+            self._legacy_id
         )
-
-        connected_future = self._mqtt_connection.connect()
-        self._shadow_client = iotshadow.IotShadowClient(self._mqtt_connection)
-        await loop.run_in_executor(None, connected_future.result)
+        loop = asyncio.get_running_loop()
+        # Building the connection loads TLS certificates from disk.
+        self._connection = await loop.run_in_executor(
+            None, partial(self._build_connection, credentials_provider)
+        )
+        await asyncio.wrap_future(self._connection.connect())
         _LOGGER.debug("Connected to MQTT")
 
-        # Subscribe to shadow topics
-        await self._subscribe_shadow_topics(client_id, shadow_callback, loop)
+        self._shadow_client = iotshadow.IotShadowClient(self._connection)
+        for device in self._devices:
+            await self._async_subscribe(device)
+        self._request_shadows()
 
-        # Subscribe to /async/{duid} topic for irrigation run updates
-        if async_callback is not None:
-            await self._subscribe_async_topic(duid, async_callback, loop)
+    def _build_connection(
+        self, credentials_provider: AwsCredentialsProvider
+    ) -> mqtt.Connection:
+        """Build the websocket connection (blocking)."""
+        # A clean session leaves nothing behind on AWS between connections;
+        # _on_connection_resumed restores subscriptions after a reconnect.
+        return mqtt_connection_builder.websockets_with_default_aws_signing(
+            region=MQTT_REGION,
+            endpoint=MQTT_ENDPOINT,
+            credentials_provider=credentials_provider,
+            client_id=str(uuid4()),
+            clean_session=True,
+            keep_alive_secs=30,
+            on_connection_interrupted=lambda connection, error, **kwargs: _LOGGER.debug(
+                "MQTT connection interrupted: %s", error
+            ),
+            on_connection_resumed=self._on_connection_resumed,
+            on_connection_closed=lambda connection, callback_data, **kwargs: (
+                _LOGGER.debug("MQTT connection closed: %s", callback_data)
+            ),
+        )
 
-        # Request current shadow state
-        await self._publish_get_shadow(client_id, loop)
+    def _on_connection_resumed(
+        self,
+        connection: mqtt.Connection,
+        return_code: mqtt.ConnectReturnCode,
+        session_present: bool,  # noqa: FBT001
+        **_: Any,
+    ) -> None:
+        """Restore subscriptions and refresh state after awscrt reconnects."""
+        _LOGGER.debug(
+            "MQTT connection resumed: %s, session present: %s",
+            return_code,
+            session_present,
+        )
+        if return_code != mqtt.ConnectReturnCode.ACCEPTED:
+            return
+        if not session_present:
+            future, _ = connection.resubscribe_existing_topics()
+            future.add_done_callback(_log_failure("resubscribe"))
+        # Shadow updates sent while disconnected were missed.
+        self._request_shadows()
 
-        # Keep connection alive until cancelled
-        disconnect_event = asyncio.Event()
-        try:
-            await disconnect_event.wait()
-        except asyncio.CancelledError:
-            _LOGGER.debug("MQTT subscription cancelled, disconnecting...")
-            self._mqtt_connection.disconnect()
-            raise
+    async def _async_subscribe(self, device: _Device) -> None:
+        """Subscribe to a device's shadow topics and its async topic."""
+        shadow = self._shadow_client
+        connection = self._connection
+        if shadow is None or connection is None:
+            msg = "MQTT connection not established"
+            raise RuntimeError(msg)
 
-    async def async_disconnect(self) -> None:
-        """Disconnect from MQTT."""
-        if self._mqtt_connection is not None:
-            self._mqtt_connection.disconnect()
-            self._mqtt_connection = None
+        thing = device.thing_name
+        callback = device.shadow_callback
+        qos = mqtt.QoS.AT_LEAST_ONCE
+        futures: list[Future] = [
+            shadow.subscribe_to_update_shadow_accepted(
+                iotshadow.UpdateShadowSubscriptionRequest(thing_name=thing),
+                qos,
+                callback,
+            )[0],
+            shadow.subscribe_to_get_shadow_accepted(
+                iotshadow.GetShadowSubscriptionRequest(thing_name=thing),
+                qos,
+                callback,
+            )[0],
+            shadow.subscribe_to_shadow_updated_events(
+                iotshadow.ShadowUpdatedSubscriptionRequest(thing_name=thing),
+                qos,
+                callback,
+            )[0],
+        ]
+        if device.async_callback is not None:
+            topic = ASYNC_TOPIC.format(duid=device.duid)
+            futures.append(
+                connection.subscribe(
+                    topic, qos, partial(_on_async_message, device.async_callback)
+                )[0]
+            )
+        await asyncio.gather(*(asyncio.wrap_future(f) for f in futures))
+        _LOGGER.debug("Subscribed to MQTT topics for %s", thing)
+
+    def _request_shadows(self) -> None:
+        """Ask for every device's current shadow (delivered to its callback)."""
+        if self._shadow_client is None:
+            return
+        for device in self._devices:
+            future = self._shadow_client.publish_get_shadow(
+                iotshadow.GetShadowRequest(thing_name=device.thing_name),
+                mqtt.QoS.AT_LEAST_ONCE,
+            )
+            future.add_done_callback(_log_failure("get shadow"))
+
+    def _disconnect(self) -> None:
+        """Disconnect once; a second disconnect makes awscrt log an error."""
+        if self._connection is not None:
+            self._connection.disconnect()
+            self._connection = None
             self._shadow_client = None
 
-    async def _subscribe_shadow_topics(
-        self,
-        client_id: str,
-        callback: Callable,
-        loop: asyncio.AbstractEventLoop,
-    ) -> None:
-        """Subscribe to all shadow topics for a device."""
-        if self._shadow_client is None:
-            raise MoenApiError("Shadow client not initialized")
 
-        _LOGGER.debug("Subscribing to shadow update accepted...")
-        update_future, _ = self._shadow_client.subscribe_to_update_shadow_accepted(
-            request=iotshadow.UpdateShadowSubscriptionRequest(thing_name=client_id),
-            qos=mqtt.QoS.AT_LEAST_ONCE,
-            callback=callback,
-        )
-        await loop.run_in_executor(None, update_future.result)
+def _on_async_message(
+    callback: Callable[[dict[str, Any]], None],
+    topic: str,
+    payload: bytes,
+    **_: Any,
+) -> None:
+    """Decode an ``/async/{duid}`` message and pass it on (awscrt thread)."""
+    try:
+        message = json.loads(payload)
+    except ValueError:
+        _LOGGER.warning("Invalid JSON on MQTT topic %s", topic)
+        return
+    callback(message)
 
-        _LOGGER.debug("Subscribing to shadow get accepted...")
-        get_future, _ = self._shadow_client.subscribe_to_get_shadow_accepted(
-            request=iotshadow.GetShadowSubscriptionRequest(thing_name=client_id),
-            qos=mqtt.QoS.AT_LEAST_ONCE,
-            callback=callback,
-        )
-        await loop.run_in_executor(None, get_future.result)
 
-        _LOGGER.debug("Subscribing to shadow updated events...")
-        events_future, _ = self._shadow_client.subscribe_to_shadow_updated_events(
-            request=iotshadow.ShadowUpdatedSubscriptionRequest(thing_name=client_id),
-            qos=mqtt.QoS.AT_LEAST_ONCE,
-            callback=callback,
-        )
-        await loop.run_in_executor(None, events_future.result)
+def _log_failure(action: str) -> Callable[[Future], None]:
+    """Return a done-callback that logs a failed awscrt future."""
 
-    async def _subscribe_async_topic(
-        self,
-        duid: str,
-        callback: Callable[[dict[str, Any]], None],
-        loop: asyncio.AbstractEventLoop,
-    ) -> None:
-        """Subscribe to the /async/{duid} topic for real-time irrigation updates."""
-        if self._mqtt_connection is None:
-            raise MoenApiError("MQTT connection not established")
+    def _done(future: Future) -> None:
+        if (err := future.exception()) is not None:
+            _LOGGER.debug("MQTT %s failed: %s", action, err)
 
-        topic = ASYNC_TOPIC.format(duid=duid)
-        _LOGGER.debug("Subscribing to async topic: %s", topic)
-
-        def _on_message(topic: str, payload: bytes, **_: Any) -> None:
-            try:
-                message = json.loads(payload)
-                _LOGGER.debug("Received async message on %s: %s", topic, message)
-                callback(message)
-            except Exception:
-                _LOGGER.exception("Failed to parse async MQTT message")
-
-        subscribe_future, _ = self._mqtt_connection.subscribe(
-            topic=topic,
-            qos=mqtt.QoS.AT_LEAST_ONCE,
-            callback=_on_message,
-        )
-        await loop.run_in_executor(None, subscribe_future.result)
-        _LOGGER.debug("Subscribed to async topic: %s", topic)
-
-    async def _publish_get_shadow(
-        self,
-        client_id: str,
-        loop: asyncio.AbstractEventLoop,
-    ) -> None:
-        """Publish a get shadow request to receive current state."""
-        if self._shadow_client is None:
-            raise MoenApiError("Shadow client not initialized")
-
-        publish_future = self._shadow_client.publish_get_shadow(
-            request=iotshadow.GetShadowRequest(thing_name=client_id),
-            qos=mqtt.QoS.AT_LEAST_ONCE,
-        )
-        await loop.run_in_executor(None, publish_future.result)
+    return _done
