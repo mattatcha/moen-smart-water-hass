@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from .coordinator import MoenDataUpdateCoordinator
+    from .moen_api.models import ZoneData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -61,13 +62,18 @@ class ZoneValve(MoenZoneEntity, ValveEntity):
         return f"{self._zone_name} Zone Valve"
 
     @property
+    def extra_state_attributes(self) -> ZoneData | None:
+        """Return the state attributes of the zone."""
+        return self._device.zone_from_client_id(self._zone_number)
+
+    @property
     def is_closed(self) -> bool:
         """Return true if the valve is closed."""
         return str(self._device.hydra_overview.get("zoneID")) != str(self._zone_number)
 
     async def async_open_valve(self, **kwargs: Any) -> None:  # noqa: ARG002
         """Open the valve (start watering)."""
-        duration = self._get_duration()
+        duration = self._get_duration() * 60  # convert minutes to seconds for API
         zones = [{"id": self._zone_full_id, "duration": duration}]
         await self._device.client.async_create_manual_plan(
             device_id=self._device.id,

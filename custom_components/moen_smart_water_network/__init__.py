@@ -58,7 +58,7 @@ async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
         """Handle start watering service call."""
         device_id = call.data.get("device_id")
         zone_id = f"{device_id}_{call.data.get('zone_id')}"
-        duration = call.data.get("duration", 5)
+        duration = call.data.get("duration", 5) * 60  # minutes to seconds for API
 
         svc_client = None
         for entry_data in hass.data[DOMAIN].values():

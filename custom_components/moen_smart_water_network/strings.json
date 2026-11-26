@@ -60,9 +60,6 @@
     "switch": {
       "zone_enabled": {
         "name": "Zone Enabled"
-      },
-      "zone_run": {
-        "name": "Zone Run"
       }
     },
     "valve": {
